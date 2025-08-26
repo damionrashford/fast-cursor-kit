@@ -1,0 +1,407 @@
+---
+description: Command-line interface reference for fast-agent go command
+globs: ["**/*.py", "**/*.sh", "**/*.bash"]
+alwaysApply: true
+---
+
+# fast-agent go Command
+
+## fast-agent go command
+
+The `go` command allows you to run an interactive agent directly from the command line without creating a dedicated agent.py file.
+
+### Usage
+
+```bash
+fast-agent go [OPTIONS]
+```
+
+### Options
+
+- `--name TEXT`: Name for the workflow (default: "FastAgent CLI")
+- `--instruction`, `-i <path or url>`: File name or URL for [System Prompt](https://fast-agent.ai/agents/instructions/) (default: "You are a helpful AI Agent.")
+- `--config-path`, `-c <path>`: Path to config file
+- `--servers <server1>,<server2>`: Comma-separated list of server names to enable from config
+- `--url TEXT`: Comma-separated list of HTTP/SSE URLs to connect to directly
+- `--auth TEXT`: Bearer token for authorization with URL-based servers
+- `--model <model_string>`: Override the default model (e.g., haiku, sonnet, gpt-4)
+- `--model <model_string1>,<model_string2>,...`: Set up a `parallel` containing each model
+- `--message`, `-m TEXT`: Message to send to the agent (skips interactive mode)
+- `--prompt-file`, `-p <path>`: Path to a prompt file to use (either text or JSON)
+- `--quiet`: Disable progress display and logging
+- `--stdio "<command> <options>"`: Run the command to attach a STDIO server (enclose arguments in quotes)
+- `--npx "@package/name <options>"`: Run an NPX package as a STDIO server (enclose arguments in quotes)
+- `--uvx "@package/name <options>"`: Run an UVX package as a STDIO server (enclose arguments in quotes)
+
+### Examples
+
+```bash
+# Basic usage with interactive mode
+fast-agent go --model=haiku
+
+# Specifying servers from configuration
+fast-agent go --servers=fetch,filesystem --model=haiku
+
+# Directly connecting to HTTP/SSE servers via URLs
+fast-agent go --url=http://localhost:8001/mcp,http://api.example.com/sse
+
+# Connecting to an authenticated API endpoint
+fast-agent go --url=https://api.example.com/mcp --auth=YOUR_API_TOKEN
+
+# Non-interactive mode with a single message
+fast-agent go --message="What is the weather today?" --model=haiku
+
+# Using a prompt file
+fast-agent go --prompt-file=my-prompt.txt --model=haiku
+```
+
+### URL Connection Details
+
+The `--url` parameter allows you to connect directly to HTTP or SSE servers using URLs.
+
+- URLs must have http or https scheme
+- The transport type is determined by the URL path:
+  - URLs ending with `/sse` are treated as SSE transport
+  - URLs ending with `/mcp` or automatically appended with `/mcp` are treated as HTTP transport
+- Server names are generated automatically based on the hostname, port, and path
+
+### Model Specification
+
+You can specify models using the standard format:
+
+```bash
+# Single model
+fast-agent go --model=openai.gpt-4o
+
+# Multiple models (creates a parallel workflow)
+fast-agent go --model=openai.gpt-4o,anthropic.claude-3-5-sonnet-latest
+
+# Model with reasoning effort
+fast-agent go --model=openai.o3-mini.high
+```
+
+### Server Configuration
+
+#### From Config File
+
+```bash
+# Use servers defined in fastagent.config.yaml
+fast-agent go --servers=brave_search,filesystem,github
+
+# Specify custom config file
+fast-agent go --config-path=./custom-config.yaml --servers=my_server
+```
+
+#### Direct URL Connection
+
+```bash
+# HTTP server
+fast-agent go --url=http://localhost:8000/mcp
+
+# SSE server
+fast-agent go --url=http://localhost:9000/sse
+
+# Multiple servers
+fast-agent go --url=http://server1:8000/mcp,http://server2:9000/sse
+
+# With authentication
+fast-agent go --url=https://api.example.com/mcp --auth=Bearer YOUR_TOKEN
+```
+
+### Instruction Sources
+
+#### File-based Instructions
+
+```bash
+# Local file
+fast-agent go --instruction=./my-prompt.md
+
+# Remote file
+fast-agent go --instruction=https://raw.githubusercontent.com/user/repo/main/prompt.md
+
+# JSON file
+fast-agent go --instruction=./prompt.json
+```
+
+#### URL-based Instructions
+
+```bash
+# GitHub raw content
+fast-agent go --instruction=https://raw.githubusercontent.com/user/repo/main/prompt.md
+
+# Gist
+fast-agent go --instruction=https://gist.githubusercontent.com/user/gist-id/raw/prompt.md
+
+# Custom API
+fast-agent go --instruction=https://api.example.com/prompts/my-prompt
+```
+
+### STDIO Server Integration
+
+#### Using NPX
+
+```bash
+# Brave search server
+fast-agent go --npx="@modelcontextprotocol/server-brave-search" --model=haiku
+
+# GitHub server
+fast-agent go --npx="@modelcontextprotocol/server-github" --model=haiku
+
+# With environment variables
+fast-agent go --npx="@modelcontextprotocol/server-brave-search" --model=haiku \
+  --env BRAVE_API_KEY=your_key
+```
+
+#### Using UVX
+
+```bash
+# Filesystem server
+fast-agent go --uvx="mcp-server-filesystem" --model=haiku
+
+# Custom server
+fast-agent go --uvx="my-mcp-server" --model=haiku
+```
+
+#### Using STDIO
+
+```bash
+# Custom command
+fast-agent go --stdio="python my_server.py" --model=haiku
+
+# With arguments
+fast-agent go --stdio="node server.js --port 3000" --model=haiku
+```
+
+### Advanced Usage
+
+#### Parallel Model Comparison
+
+```bash
+# Compare multiple models
+fast-agent go --model=openai.gpt-4o,anthropic.claude-3-5-sonnet-latest,openai.gpt-4o-mini
+
+# This creates a parallel workflow where you can compare responses from different models
+```
+
+#### Complex Server Setup
+
+```bash
+# Multiple servers with different types
+fast-agent go \
+  --servers=brave_search,filesystem \
+  --url=http://custom-api.com/mcp \
+  --npx="@modelcontextprotocol/server-github" \
+  --model=haiku
+```
+
+#### Custom Configuration
+
+```bash
+# Use custom config file
+fast-agent go --config-path=./production-config.yaml --model=haiku
+
+# Override model from config
+fast-agent go --config-path=./config.yaml --model=openai.gpt-4o
+```
+
+### Interactive Mode Features
+
+When running in interactive mode, you have access to several commands:
+
+#### Built-in Commands
+
+```bash
+# Switch agents
+@agent_name
+
+# Apply a prompt
+/prompts
+
+# Save conversation history
+***SAVE_HISTORY conversation.txt
+
+# Exit
+exit
+quit
+stop
+```
+
+#### Agent Switching
+
+```bash
+# Switch to a specific agent
+@haiku
+
+# Switch to parallel workflow
+@parallel
+
+# List available agents
+@list
+```
+
+#### Prompt Management
+
+```bash
+# View available prompts
+/prompts
+
+# Apply a specific prompt
+/prompts 1
+
+# Apply prompt with arguments
+/prompts my_prompt --arg1=value1 --arg2=value2
+```
+
+### Non-Interactive Mode
+
+#### Single Message
+
+```bash
+# Send a single message and exit
+fast-agent go --message="What is the weather in London?" --model=haiku
+
+# With quiet output
+fast-agent go --message="Generate a summary" --model=haiku --quiet
+```
+
+#### Prompt File
+
+```bash
+# Use a prompt file
+fast-agent go --prompt-file=./conversation.txt --model=haiku
+
+# JSON prompt file
+fast-agent go --prompt-file=./prompt.json --model=haiku
+```
+
+### Environment Variables
+
+You can use environment variables for configuration:
+
+```bash
+# Set API keys
+export OPENAI_API_KEY="your-key"
+export ANTHROPIC_API_KEY="your-key"
+
+# Use in command
+fast-agent go --model=openai.gpt-4o
+```
+
+### Configuration Precedence
+
+The command follows this precedence order (highest to lowest):
+
+1. Command line arguments
+2. Environment variables
+3. Configuration file
+4. Default values
+
+### Error Handling
+
+#### Common Issues
+
+```bash
+# API key not found
+fast-agent go --model=openai.gpt-4o
+# Error: OpenAI API key not found. Set OPENAI_API_KEY environment variable.
+
+# Server not found
+fast-agent go --servers=nonexistent_server
+# Error: Server 'nonexistent_server' not found in configuration.
+
+# Invalid URL
+fast-agent go --url=invalid-url
+# Error: Invalid URL format. Must be http:// or https://
+```
+
+#### Debug Mode
+
+```bash
+# Enable debug logging
+FAST_AGENT_DEBUG=1 fast-agent go --model=haiku
+
+# Verbose output
+fast-agent go --model=haiku --verbose
+```
+
+### Best Practices
+
+#### Security
+
+```bash
+# Use environment variables for sensitive data
+export API_KEY="your-secret-key"
+fast-agent go --url=https://api.example.com/mcp --auth=$API_KEY
+
+# Don't hardcode secrets in command line
+# ❌ Bad: fast-agent go --auth=your-secret-key
+# ✅ Good: fast-agent go --auth=$API_KEY
+```
+
+#### Performance
+
+```bash
+# Use quiet mode for automation
+fast-agent go --message="Process data" --model=haiku --quiet
+
+# Limit server connections to what you need
+fast-agent go --servers=filesystem --model=haiku
+```
+
+#### Organization
+
+```bash
+# Use descriptive names
+fast-agent go --name="Data Analysis Agent" --model=haiku
+
+# Use configuration files for complex setups
+fast-agent go --config-path=./analysis-config.yaml
+```
+
+### Integration Examples
+
+#### Script Integration
+
+```bash
+#!/bin/bash
+# analyze.sh
+
+RESULT=$(fast-agent go --message="Analyze this data: $1" --model=haiku --quiet)
+echo "Analysis result: $RESULT"
+```
+
+#### CI/CD Integration
+
+```yaml
+# .github/workflows/agent-test.yml
+name: Agent Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Test Agent
+        run: |
+          fast-agent go --message="Run tests" --model=haiku --quiet
+```
+
+#### Docker Integration
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+RUN pip install fast-agent-mcp
+
+ENTRYPOINT ["fast-agent", "go"]
+```
+
+```bash
+# Run in Docker
+docker run -e OPENAI_API_KEY=$OPENAI_API_KEY my-agent --model=haiku
+```
+
+---
+
+*Source: [https://fast-agent.ai/ref/go_command/](https://fast-agent.ai/ref/go_command/)*

@@ -1,0 +1,634 @@
+# FastStream Message Brokers
+
+FastStream provides unified support for multiple message brokers, each with their own strengths and use cases. This guide covers all supported brokers with detailed configuration and patterns.
+
+## Apache Kafka
+
+### Overview
+
+Kafka is a distributed streaming platform designed for high-throughput, fault-tolerant messaging. FastStream supports both AIOKafka and Confluent Kafka clients.
+
+### Installation
+
+```bash
+# Install Kafka support
+pip install faststream[kafka]
+
+# Install with Confluent support
+pip install faststream[kafka,confluent]
+```
+
+### Basic Configuration
+
+```python
+from faststream.kafka import KafkaBroker
+from faststream import FastStream
+
+# Basic Kafka broker
+broker = KafkaBroker("localhost:9092")
+
+# With authentication
+broker = KafkaBroker(
+    "localhost:9092",
+    username="user",
+    password="pass"
+)
+
+# With SSL/TLS
+broker = KafkaBroker(
+    "localhost:9092",
+    ssl_context=ssl_context,
+    security_protocol="SASL_SSL"
+)
+
+app = FastStream("kafka-service", broker=broker)
+```
+
+### Advanced Kafka Configuration
+
+```python
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+
+broker = KafkaBroker(
+    "localhost:9092",
+    producer_kwargs={
+        "acks": "all",
+        "compression_type": "gzip",
+        "batch_size": 16384,
+        "linger_ms": 5
+    },
+    consumer_kwargs={
+        "auto_offset_reset": "earliest",
+        "enable_auto_commit": True,
+        "group_id": "my-group"
+    }
+)
+```
+
+### Kafka Patterns
+
+#### Topic Subscription
+
+```python
+@app.subscribe("user-events")
+async def handle_user_events(message: UserEvent):
+    print(f"Processing user event: {message}")
+    return {"status": "processed"}
+
+# Subscribe to multiple topics
+@app.subscribe("user-events", "order-events")
+async def handle_events(message: Union[UserEvent, OrderEvent]):
+    print(f"Processing event: {message}")
+    return {"status": "processed"}
+```
+
+#### Partition Assignment
+
+```python
+@app.subscribe("user-events", partition=0)
+async def handle_partition_0(message: UserEvent):
+    print(f"Processing partition 0: {message}")
+
+@app.subscribe("user-events", partition=1)
+async def handle_partition_1(message: UserEvent):
+    print(f"Processing partition 1: {message}")
+```
+
+#### Publishing to Kafka
+
+```python
+@app.publish("user-events")
+async def publish_user_event(user_event: UserEvent):
+    return user_event
+
+# Publish with specific partition
+@app.publish("user-events", partition=0)
+async def publish_to_partition(user_event: UserEvent):
+    return user_event
+
+# Publish with key
+@app.publish("user-events")
+async def publish_with_key(user_event: UserEvent):
+    return user_event, user_event.user_id  # message, key
+```
+
+### Kafka Streams Integration
+
+```python
+from faststream.kafka import KafkaBroker
+
+broker = KafkaBroker("localhost:9092")
+
+@app.subscribe("input-topic")
+async def process_stream(message: InputEvent):
+    # Process the message
+    processed = await process_message(message)
+    
+    # Publish to output topic
+    await broker.publish("output-topic", processed)
+```
+
+## RabbitMQ
+
+### Overview
+
+RabbitMQ is a message broker that implements the Advanced Message Queuing Protocol (AMQP). It's known for its reliability and flexible routing.
+
+### Installation
+
+```bash
+pip install faststream[rabbit]
+```
+
+### Basic Configuration
+
+```python
+from faststream.rabbit import RabbitBroker
+from faststream import FastStream
+
+# Basic RabbitMQ broker
+broker = RabbitBroker("amqp://localhost:5672")
+
+# With authentication
+broker = RabbitBroker(
+    "amqp://user:pass@localhost:5672/vhost"
+)
+
+# With SSL/TLS
+broker = RabbitBroker(
+    "amqps://localhost:5671",
+    ssl_context=ssl_context
+)
+
+app = FastStream("rabbit-service", broker=broker)
+```
+
+### Advanced RabbitMQ Configuration
+
+```python
+broker = RabbitBroker(
+    "amqp://localhost:5672",
+    connection_kwargs={
+        "heartbeat": 600,
+        "blocked_connection_timeout": 300,
+        "connection_attempts": 3
+    },
+    channel_kwargs={
+        "prefetch_count": 10,
+        "prefetch_size": 0
+    }
+)
+```
+
+### RabbitMQ Patterns
+
+#### Queue Declaration
+
+```python
+@app.subscribe("user-queue")
+async def handle_user_queue(message: UserEvent):
+    print(f"Processing from queue: {message}")
+    return {"status": "processed"}
+
+# Declare queue with options
+@app.subscribe(
+    "user-queue",
+    queue_kwargs={
+        "durable": True,
+        "auto_delete": False,
+        "arguments": {"x-max-priority": 10}
+    }
+)
+async def handle_priority_queue(message: UserEvent):
+    print(f"Processing priority message: {message}")
+```
+
+#### Exchange and Routing
+
+```python
+# Direct exchange
+@app.subscribe(
+    "user-events",
+    exchange="user-exchange",
+    routing_key="user.created"
+)
+async def handle_user_created(message: UserEvent):
+    print(f"User created: {message}")
+
+# Topic exchange
+@app.subscribe(
+    "user-events",
+    exchange="user-topic",
+    routing_key="user.*.created"
+)
+async def handle_user_topic(message: UserEvent):
+    print(f"User topic event: {message}")
+
+# Fanout exchange
+@app.subscribe(
+    "user-events",
+    exchange="user-fanout",
+    routing_key=""
+)
+async def handle_user_fanout(message: UserEvent):
+    print(f"User fanout event: {message}")
+```
+
+#### Publishing to RabbitMQ
+
+```python
+@app.publish("user-queue")
+async def publish_to_queue(user_event: UserEvent):
+    return user_event
+
+# Publish with routing
+@app.publish(
+    "user-events",
+    exchange="user-exchange",
+    routing_key="user.created"
+)
+async def publish_with_routing(user_event: UserEvent):
+    return user_event
+
+# Publish with headers
+@app.publish("user-events")
+async def publish_with_headers(user_event: UserEvent):
+    return user_event, {"priority": "high"}
+```
+
+### RabbitMQ Dead Letter Queue
+
+```python
+@app.subscribe(
+    "user-queue",
+    queue_kwargs={
+        "arguments": {
+            "x-dead-letter-exchange": "dlx",
+            "x-dead-letter-routing-key": "user.failed"
+        }
+    }
+)
+async def handle_with_dlq(message: UserEvent):
+    try:
+        # Process message
+        return {"status": "success"}
+    except Exception:
+        # Message will be sent to dead letter queue
+        raise
+```
+
+## NATS
+
+### Overview
+
+NATS is a lightweight, high-performance messaging system designed for cloud-native applications and microservices.
+
+### Installation
+
+```bash
+pip install faststream[nats]
+```
+
+### Basic Configuration
+
+```python
+from faststream.nats import NatsBroker
+from faststream import FastStream
+
+# Basic NATS broker
+broker = NatsBroker("nats://localhost:4222")
+
+# With authentication
+broker = NatsBroker(
+    "nats://user:pass@localhost:4222"
+)
+
+# With TLS
+broker = NatsBroker(
+    "tls://localhost:4222",
+    tls_context=tls_context
+)
+
+app = FastStream("nats-service", broker=broker)
+```
+
+### Advanced NATS Configuration
+
+```python
+broker = NatsBroker(
+    "nats://localhost:4222",
+    connection_kwargs={
+        "max_reconnect_attempts": 10,
+        "reconnect_time_wait": 1,
+        "ping_interval": 20,
+        "max_outstanding_pings": 5
+    }
+)
+```
+
+### NATS Patterns
+
+#### Subject Subscription
+
+```python
+@app.subscribe("user.events")
+async def handle_user_events(message: UserEvent):
+    print(f"Processing user event: {message}")
+    return {"status": "processed"}
+
+# Wildcard subscriptions
+@app.subscribe("user.*")
+async def handle_user_wildcard(message: UserEvent):
+    print(f"Processing user wildcard: {message}")
+
+@app.subscribe("user.>")
+async def handle_user_hierarchy(message: UserEvent):
+    print(f"Processing user hierarchy: {message}")
+```
+
+#### Queue Groups
+
+```python
+@app.subscribe("user.events", queue="user-processors")
+async def handle_user_queue(message: UserEvent):
+    print(f"Processing in queue group: {message}")
+    return {"status": "processed"}
+```
+
+#### Publishing to NATS
+
+```python
+@app.publish("user.events")
+async def publish_user_event(user_event: UserEvent):
+    return user_event
+
+# Publish with reply subject
+@app.publish("user.events", reply_to="user.response")
+async def publish_with_reply(user_event: UserEvent):
+    return user_event
+```
+
+### NATS Request-Reply
+
+```python
+@app.subscribe("user.request")
+async def handle_user_request(message: UserRequest):
+    # Process request
+    response = await process_user_request(message)
+    return response
+
+# Make request
+async def request_user_data():
+    response = await app.request(
+        "user.request",
+        UserRequest(user_id=123)
+    )
+    return response
+```
+
+## Redis
+
+### Overview
+
+Redis is an in-memory data structure store that can be used as a message broker. FastStream supports Redis Pub/Sub and Streams.
+
+### Installation
+
+```bash
+pip install faststream[redis]
+```
+
+### Basic Configuration
+
+```python
+from faststream.redis import RedisBroker
+from faststream import FastStream
+
+# Basic Redis broker
+broker = RedisBroker("redis://localhost:6379")
+
+# With authentication
+broker = RedisBroker(
+    "redis://:password@localhost:6379/0"
+)
+
+# With SSL
+broker = RedisBroker(
+    "rediss://localhost:6379",
+    ssl_context=ssl_context
+)
+
+app = FastStream("redis-service", broker=broker)
+```
+
+### Advanced Redis Configuration
+
+```python
+broker = RedisBroker(
+    "redis://localhost:6379",
+    connection_kwargs={
+        "max_connections": 20,
+        "retry_on_timeout": True,
+        "socket_keepalive": True,
+        "socket_keepalive_options": {}
+    }
+)
+```
+
+### Redis Patterns
+
+#### Pub/Sub
+
+```python
+@app.subscribe("user:events")
+async def handle_user_pubsub(message: UserEvent):
+    print(f"Processing pub/sub event: {message}")
+    return {"status": "processed"}
+
+@app.publish("user:events")
+async def publish_user_pubsub(user_event: UserEvent):
+    return user_event
+```
+
+#### Redis Streams
+
+```python
+@app.subscribe("user:stream")
+async def handle_user_stream(message: UserEvent):
+    print(f"Processing stream event: {message}")
+    return {"status": "processed"}
+
+# Subscribe with consumer group
+@app.subscribe(
+    "user:stream",
+    consumer_group="user-processors",
+    consumer_name="consumer-1"
+)
+async def handle_user_stream_group(message: UserEvent):
+    print(f"Processing in consumer group: {message}")
+    return {"status": "processed"}
+
+@app.publish("user:stream")
+async def publish_user_stream(user_event: UserEvent):
+    return user_event
+```
+
+### Redis Streams with Consumer Groups
+
+```python
+# Create consumer group
+await broker.create_consumer_group("user:stream", "user-processors")
+
+@app.subscribe(
+    "user:stream",
+    consumer_group="user-processors",
+    consumer_name="consumer-1",
+    stream_kwargs={
+        "block": 1000,
+        "count": 10
+    }
+)
+async def handle_stream_group(message: UserEvent):
+    print(f"Processing stream message: {message}")
+    return {"status": "processed"}
+```
+
+## Broker Comparison
+
+### Performance Characteristics
+
+| Broker | Throughput | Latency | Durability | Ordering |
+|--------|------------|---------|------------|----------|
+| Kafka | Very High | Low | High | Per-partition |
+| RabbitMQ | High | Very Low | High | Per-queue |
+| NATS | Very High | Very Low | Low | Per-subject |
+| Redis | High | Very Low | Low | Per-stream |
+
+### Use Cases
+
+#### Kafka
+- High-throughput event streaming
+- Log aggregation
+- Real-time analytics
+- Event sourcing
+
+#### RabbitMQ
+- Traditional message queuing
+- Work distribution
+- Request-reply patterns
+- Complex routing
+
+#### NATS
+- Microservices communication
+- Real-time messaging
+- Cloud-native applications
+- Request-reply patterns
+
+#### Redis
+- Caching with messaging
+- Real-time notifications
+- Session management
+- Simple pub/sub
+
+## Best Practices
+
+### Message Serialization
+
+```python
+from pydantic import BaseModel
+import json
+
+class MessageSerializer:
+    @staticmethod
+    def serialize(message: BaseModel) -> bytes:
+        return json.dumps(message.dict()).encode()
+    
+    @staticmethod
+    def deserialize(data: bytes) -> dict:
+        return json.loads(data.decode())
+
+# Use custom serializer
+broker = KafkaBroker(
+    "localhost:9092",
+    serializer=MessageSerializer.serialize,
+    deserializer=MessageSerializer.deserialize
+)
+```
+
+### Error Handling
+
+```python
+@app.subscribe("user-events")
+async def handle_with_retry(message: UserEvent, context: Context):
+    try:
+        return await process_message(message)
+    except Exception as e:
+        # Log error
+        print(f"Error processing message: {e}")
+        
+        # Retry logic
+        if context.retry_count < 3:
+            raise  # Will retry
+        else:
+            # Send to dead letter queue
+            await context.publish("dlq", message)
+            return {"status": "failed"}
+```
+
+### Monitoring and Observability
+
+```python
+from faststream import Context
+import time
+
+@app.middleware
+async def monitoring_middleware(context: Context, call_next):
+    start_time = time.time()
+    
+    try:
+        result = await call_next(context)
+        processing_time = time.time() - start_time
+        
+        # Log metrics
+        print(f"Message processed in {processing_time:.2f}s")
+        return result
+    except Exception as e:
+        processing_time = time.time() - start_time
+        print(f"Message failed after {processing_time:.2f}s: {e}")
+        raise
+```
+
+### Connection Management
+
+```python
+@app.on_startup
+async def startup():
+    # Initialize broker connections
+    await broker.connect()
+
+@app.on_shutdown
+async def shutdown():
+    # Close broker connections
+    await broker.close()
+```
+
+### Message Validation
+
+```python
+from pydantic import ValidationError
+
+@app.subscribe("user-events")
+async def handle_with_validation(message: UserEvent):
+    try:
+        # Validate message
+        validated_message = UserEvent(**message.dict())
+        return await process_message(validated_message)
+    except ValidationError as e:
+        print(f"Validation error: {e}")
+        # Handle invalid message
+        return {"status": "validation_failed"}
+```
+description:
+globs:
+alwaysApply: false
+---

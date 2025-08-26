@@ -1,0 +1,1066 @@
+# React Router Hooks Reference
+
+## Navigation Hooks
+
+### `useNavigate()`
+
+Hook for programmatic navigation.
+
+#### Return Value
+```typescript
+function useNavigate(): NavigateFunction;
+
+interface NavigateFunction {
+  (to: To, options?: NavigateOptions): void;
+  (delta: number): void;
+}
+
+interface NavigateOptions {
+  replace?: boolean;
+  state?: any;
+  relative?: "route" | "path";
+}
+```
+
+#### Usage Examples
+
+**Basic Navigation**
+```typescript
+import { useNavigate } from "react-router-dom";
+
+function PostActions({ postId }: { postId: string }) {
+  const navigate = useNavigate();
+  
+  const handleEdit = () => {
+    navigate(`/posts/${postId}/edit`);
+  };
+  
+  const handleDelete = async () => {
+    await deletePost(postId);
+    navigate("/posts", { replace: true });
+  };
+  
+  return (
+    <div>
+      <button onClick={handleEdit}>Edit</button>
+      <button onClick={handleDelete}>Delete</button>
+    </div>
+  );
+}
+```
+
+**With State**
+```typescript
+function LoginForm() {
+  const navigate = useNavigate();
+  
+  const handleSubmit = async (formData: FormData) => {
+    const user = await login(formData);
+    navigate("/dashboard", {
+      state: { message: "Welcome back!" },
+      replace: true
+    });
+  };
+  
+  return (
+    <Form onSubmit={handleSubmit}>
+      {/* form fields */}
+    </Form>
+  );
+}
+```
+
+**Relative Navigation**
+```typescript
+function PostDetail({ postId }: { postId: string }) {
+  const navigate = useNavigate();
+  
+  const goBack = () => {
+    navigate(-1); // Go back one step
+  };
+  
+  const goToEdit = () => {
+    navigate("edit", { relative: "route" }); // Navigate to /posts/:id/edit
+  };
+  
+  return (
+    <div>
+      <button onClick={goBack}>Back</button>
+      <button onClick={goToEdit}>Edit</button>
+    </div>
+  );
+}
+```
+
+### `useLocation()`
+
+Hook for accessing the current location.
+
+#### Return Value
+```typescript
+function useLocation(): Location;
+
+interface Location {
+  pathname: string;
+  search: string;
+  hash: string;
+  state: any;
+  key: string;
+}
+```
+
+#### Usage Examples
+
+**Basic Location Access**
+```typescript
+import { useLocation } from "react-router-dom";
+
+function Breadcrumbs() {
+  const location = useLocation();
+  
+  const pathSegments = location.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment, index, array) => ({
+      name: segment,
+      path: "/" + array.slice(0, index + 1).join("/")
+    }));
+  
+  return (
+    <nav>
+      <Link to="/">Home</Link>
+      {pathSegments.map((segment) => (
+        <span key={segment.path}>
+          {" > "}
+          <Link to={segment.path}>{segment.name}</Link>
+        </span>
+      ))}
+    </nav>
+  );
+}
+```
+
+**Accessing State**
+```typescript
+function Dashboard() {
+  const location = useLocation();
+  const message = location.state?.message;
+  
+  return (
+    <div>
+      {message && <div className="alert">{message}</div>}
+      <h1>Dashboard</h1>
+    </div>
+  );
+}
+```
+
+**URL Change Detection**
+```typescript
+function Analytics() {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Track page view
+    analytics.track("page_view", {
+      path: location.pathname,
+      search: location.search
+    });
+  }, [location]);
+  
+  return null;
+}
+```
+
+### `useParams()`
+
+Hook for accessing route parameters.
+
+#### Return Value
+```typescript
+function useParams<T extends Params>(): T;
+```
+
+#### Usage Examples
+
+**Basic Parameter Access**
+```typescript
+import { useParams } from "react-router-dom";
+
+function PostDetail() {
+  const { postId } = useParams();
+  
+  return (
+    <div>
+      <h1>Post {postId}</h1>
+      {/* Post content */}
+    </div>
+  );
+}
+```
+
+**Multiple Parameters**
+```typescript
+function UserProfile() {
+  const { userId, tab } = useParams();
+  
+  return (
+    <div>
+      <h1>User {userId}</h1>
+      <nav>
+        <Link to={`/users/${userId}/profile`}>Profile</Link>
+        <Link to={`/users/${userId}/posts`}>Posts</Link>
+        <Link to={`/users/${userId}/settings`}>Settings</Link>
+      </nav>
+      {tab === "profile" && <ProfileTab />}
+      {tab === "posts" && <PostsTab />}
+      {tab === "settings" && <SettingsTab />}
+    </div>
+  );
+}
+```
+
+**TypeScript with Parameters**
+```typescript
+interface PostParams {
+  postId: string;
+  commentId?: string;
+}
+
+function PostDetail() {
+  const { postId, commentId } = useParams<PostParams>();
+  
+  return (
+    <div>
+      <h1>Post {postId}</h1>
+      {commentId && <p>Comment {commentId}</p>}
+    </div>
+  );
+}
+```
+
+### `useSearchParams()`
+
+Hook for accessing and modifying query parameters.
+
+#### Return Value
+```typescript
+function useSearchParams(): [URLSearchParams, SetURLSearchParamsFunction];
+
+type SetURLSearchParamsFunction = (
+  nextInit: URLSearchParamsInit,
+  navigateOptions?: NavigateOptions
+) => void;
+```
+
+#### Usage Examples
+
+**Basic Query Parameter Access**
+```typescript
+import { useSearchParams } from "react-router-dom";
+
+function ProductList() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const category = searchParams.get("category");
+  const sort = searchParams.get("sort") || "name";
+  const page = parseInt(searchParams.get("page") || "1");
+  
+  return (
+    <div>
+      <h1>Products</h1>
+      <div>
+        <select 
+          value={category || ""} 
+          onChange={(e) => {
+            setSearchParams({ category: e.target.value });
+          }}
+        >
+          <option value="">All Categories</option>
+          <option value="electronics">Electronics</option>
+          <option value="clothing">Clothing</option>
+        </select>
+      </div>
+      {/* Product list */}
+    </div>
+  );
+}
+```
+
+**Complex Query Parameter Management**
+```typescript
+function SearchPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const query = searchParams.get("q") || "";
+  const filters = searchParams.getAll("filter");
+  const sort = searchParams.get("sort") || "relevance";
+  
+  const updateFilters = (newFilters: string[]) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("filter");
+    newFilters.forEach(filter => params.append("filter", filter));
+    setSearchParams(params);
+  };
+  
+  const clearFilters = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("filter");
+    setSearchParams(params);
+  };
+  
+  return (
+    <div>
+      <input 
+        value={query}
+        onChange={(e) => setSearchParams({ q: e.target.value })}
+        placeholder="Search..."
+      />
+      <div>
+        {filters.map(filter => (
+          <span key={filter}>
+            {filter}
+            <button onClick={() => updateFilters(filters.filter(f => f !== filter))}>
+              ×
+            </button>
+          </span>
+        ))}
+        {filters.length > 0 && (
+          <button onClick={clearFilters}>Clear All</button>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Data Hooks
+
+### `useLoaderData()`
+
+Hook for accessing loader data.
+
+#### Return Value
+```typescript
+function useLoaderData<T = any>(): T;
+```
+
+#### Usage Examples
+
+**Basic Data Access**
+```typescript
+import { useLoaderData } from "react-router-dom";
+
+function PostList() {
+  const { posts } = useLoaderData();
+  
+  return (
+    <div>
+      <h1>Posts</h1>
+      <ul>
+        {posts.map(post => (
+          <li key={post.id}>
+            <Link to={`/posts/${post.id}`}>{post.title}</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+**TypeScript with Loader Data**
+```typescript
+interface LoaderData {
+  posts: Post[];
+  totalPages: number;
+  currentPage: number;
+}
+
+function PostList() {
+  const { posts, totalPages, currentPage } = useLoaderData<LoaderData>();
+  
+  return (
+    <div>
+      <h1>Posts</h1>
+      <ul>
+        {posts.map(post => (
+          <li key={post.id}>
+            <Link to={`/posts/${post.id}`}>{post.title}</Link>
+          </li>
+        ))}
+      </ul>
+      <Pagination currentPage={currentPage} totalPages={totalPages} />
+    </div>
+  );
+}
+```
+
+### `useActionData()`
+
+Hook for accessing action data (form submission results).
+
+#### Return Value
+```typescript
+function useActionData<T = any>(): T | null;
+```
+
+#### Usage Examples
+
+**Form Validation Errors**
+```typescript
+import { useActionData } from "react-router-dom";
+
+function CreatePost() {
+  const actionData = useActionData<{ errors?: Record<string, string> }>();
+  
+  return (
+    <Form method="post">
+      <div>
+        <label htmlFor="title">Title</label>
+        <input 
+          id="title" 
+          name="title" 
+          type="text" 
+          required 
+        />
+        {actionData?.errors?.title && (
+          <span className="error">{actionData.errors.title}</span>
+        )}
+      </div>
+      
+      <div>
+        <label htmlFor="content">Content</label>
+        <textarea 
+          id="content" 
+          name="content" 
+          required 
+        />
+        {actionData?.errors?.content && (
+          <span className="error">{actionData.errors.content}</span>
+        )}
+      </div>
+      
+      <button type="submit">Create Post</button>
+    </Form>
+  );
+}
+```
+
+**Success Messages**
+```typescript
+function EditProfile() {
+  const actionData = useActionData<{ success?: boolean; message?: string }>();
+  
+  return (
+    <div>
+      {actionData?.success && (
+        <div className="success">{actionData.message}</div>
+      )}
+      
+      <Form method="post">
+        {/* form fields */}
+      </Form>
+    </div>
+  );
+}
+```
+
+### `useFetcher()`
+
+Hook for imperative data fetching and form submissions.
+
+#### Return Value
+```typescript
+function useFetcher<TData = any>(): FetcherWithComponents<TData>;
+
+interface FetcherWithComponents<TData = any> {
+  data: TData | null;
+  formData: FormData | null;
+  formMethod: string | null;
+  formAction: string | null;
+  state: "idle" | "submitting" | "loading";
+  Form: typeof Form;
+  submit: (target: SubmitTarget, options?: SubmitOptions) => void;
+  load: (href: string, options?: LoadOptions) => void;
+}
+```
+
+#### Usage Examples
+
+**Imperative Data Loading**
+```typescript
+import { useFetcher } from "react-router-dom";
+
+function UserProfile() {
+  const fetcher = useFetcher();
+  
+  const loadUserData = () => {
+    fetcher.load("/api/user/profile");
+  };
+  
+  return (
+    <div>
+      <button onClick={loadUserData}>Load Profile</button>
+      
+      {fetcher.state === "loading" && <div>Loading...</div>}
+      
+      {fetcher.data && (
+        <div>
+          <h2>{fetcher.data.name}</h2>
+          <p>{fetcher.data.email}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**Optimistic Updates**
+```typescript
+function LikeButton({ postId }: { postId: string }) {
+  const fetcher = useFetcher();
+  
+  const handleLike = () => {
+    fetcher.submit(
+      { action: "like" },
+      { method: "post", action: `/posts/${postId}` }
+    );
+  };
+  
+  return (
+    <button 
+      onClick={handleLike}
+      disabled={fetcher.state === "submitting"}
+    >
+      {fetcher.state === "submitting" ? "Liking..." : "Like"}
+    </button>
+  );
+}
+```
+
+**Form with Fetcher**
+```typescript
+function SearchForm() {
+  const fetcher = useFetcher();
+  
+  return (
+    <fetcher.Form method="get" action="/search">
+      <input name="q" placeholder="Search..." />
+      <button type="submit">Search</button>
+      
+      {fetcher.state === "submitting" && <div>Searching...</div>}
+      
+      {fetcher.data && (
+        <SearchResults results={fetcher.data.results} />
+      )}
+    </fetcher.Form>
+  );
+}
+```
+
+### `useRevalidator()`
+
+Hook for manually revalidating data.
+
+#### Return Value
+```typescript
+function useRevalidator(): Revalidator;
+
+interface Revalidator {
+  revalidate: () => void;
+  state: "idle" | "loading";
+}
+```
+
+#### Usage Examples
+
+**Manual Data Refresh**
+```typescript
+import { useRevalidator } from "react-router-dom";
+
+function Dashboard() {
+  const revalidator = useRevalidator();
+  
+  const refreshData = () => {
+    revalidator.revalidate();
+  };
+  
+  return (
+    <div>
+      <button 
+        onClick={refreshData}
+        disabled={revalidator.state === "loading"}
+      >
+        {revalidator.state === "loading" ? "Refreshing..." : "Refresh"}
+      </button>
+      
+      {/* Dashboard content */}
+    </div>
+  );
+}
+```
+
+**Auto-refresh on Interval**
+```typescript
+function LiveData() {
+  const revalidator = useRevalidator();
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      revalidator.revalidate();
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [revalidator]);
+  
+  return (
+    <div>
+      <h2>Live Data</h2>
+      {revalidator.state === "loading" && <div>Updating...</div>}
+      {/* Live data content */}
+    </div>
+  );
+}
+```
+
+## State Hooks
+
+### `useNavigation()`
+
+Hook for accessing navigation state.
+
+#### Return Value
+```typescript
+function useNavigation(): Navigation;
+
+interface Navigation {
+  state: "idle" | "submitting" | "loading";
+  location: Location | null;
+  formData: FormData | null;
+  formMethod: string | null;
+  formAction: string | null;
+}
+```
+
+#### Usage Examples
+
+**Loading States**
+```typescript
+import { useNavigation } from "react-router-dom";
+
+function App() {
+  const navigation = useNavigation();
+  
+  return (
+    <div>
+      {navigation.state === "loading" && (
+        <div className="loading-bar">Loading...</div>
+      )}
+      
+      <Outlet />
+    </div>
+  );
+}
+```
+
+**Form Submission State**
+```typescript
+function CreatePost() {
+  const navigation = useNavigation();
+  
+  const isSubmitting = navigation.state === "submitting";
+  
+  return (
+    <Form method="post">
+      <input name="title" type="text" required />
+      <textarea name="content" required />
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Creating..." : "Create Post"}
+      </button>
+    </Form>
+  );
+}
+```
+
+**Navigation Progress**
+```typescript
+function NavigationProgress() {
+  const navigation = useNavigation();
+  
+  if (navigation.state === "idle") return null;
+  
+  return (
+    <div className="progress-bar">
+      <div className="progress-fill" />
+    </div>
+  );
+}
+```
+
+### `useMatches()`
+
+Hook for accessing current route matches.
+
+#### Return Value
+```typescript
+function useMatches(): UIMatch[];
+
+interface UIMatch {
+  id: string;
+  pathname: string;
+  params: Params;
+  data: unknown;
+  handle: unknown;
+}
+```
+
+#### Usage Examples
+
+**Breadcrumb Navigation**
+```typescript
+import { useMatches } from "react-router-dom";
+
+function Breadcrumbs() {
+  const matches = useMatches();
+  
+  const breadcrumbs = matches
+    .filter(match => match.handle?.breadcrumb)
+    .map(match => ({
+      name: match.handle.breadcrumb,
+      path: match.pathname
+    }));
+  
+  return (
+    <nav>
+      <Link to="/">Home</Link>
+      {breadcrumbs.map((crumb, index) => (
+        <span key={crumb.path}>
+          {" > "}
+          <Link to={crumb.path}>{crumb.name}</Link>
+        </span>
+      ))}
+    </nav>
+  );
+}
+```
+
+**Route-based Styling**
+```typescript
+function Layout() {
+  const matches = useMatches();
+  
+  const isDashboard = matches.some(match => 
+    match.pathname.startsWith("/dashboard")
+  );
+  
+  return (
+    <div className={isDashboard ? "dashboard-layout" : "default-layout"}>
+      <Outlet />
+    </div>
+  );
+}
+```
+
+**Accessing Route Data**
+```typescript
+function Analytics() {
+  const matches = useMatches();
+  
+  useEffect(() => {
+    const currentRoute = matches[matches.length - 1];
+    
+    analytics.track("page_view", {
+      route: currentRoute.pathname,
+      params: currentRoute.params,
+      data: currentRoute.data
+    });
+  }, [matches]);
+  
+  return null;
+}
+```
+
+### `useOutletContext()`
+
+Hook for sharing data between parent and child routes.
+
+#### Return Value
+```typescript
+function useOutletContext<T = any>(): T;
+```
+
+#### Usage Examples
+
+**Sharing User Data**
+```typescript
+// Parent component
+function DashboardLayout() {
+  const { user } = useAuth();
+  
+  return (
+    <div>
+      <Sidebar user={user} />
+      <main>
+        <Outlet context={{ user }} />
+      </main>
+    </div>
+  );
+}
+
+// Child component
+function Profile() {
+  const { user } = useOutletContext<{ user: User }>();
+  
+  return (
+    <div>
+      <h1>Profile for {user.name}</h1>
+      <p>Email: {user.email}</p>
+    </div>
+  );
+}
+```
+
+**Sharing Theme Context**
+```typescript
+// Parent component
+function AppLayout() {
+  const [theme, setTheme] = useState("light");
+  
+  return (
+    <div className={`app ${theme}`}>
+      <ThemeToggle theme={theme} setTheme={setTheme} />
+      <Outlet context={{ theme, setTheme }} />
+    </div>
+  );
+}
+
+// Child component
+function Settings() {
+  const { theme, setTheme } = useOutletContext<{
+    theme: string;
+    setTheme: (theme: string) => void;
+  }>();
+  
+  return (
+    <div>
+      <h1>Settings</h1>
+      <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  );
+}
+```
+
+## Utility Hooks
+
+### `useBeforeUnload()`
+
+Hook for handling beforeunload events.
+
+#### Return Value
+```typescript
+function useBeforeUnload(handler: BeforeUnloadHandler): void;
+
+type BeforeUnloadHandler = (event: BeforeUnloadEvent) => void;
+```
+
+#### Usage Examples
+
+**Form with Unsaved Changes**
+```typescript
+import { useBeforeUnload } from "react-router-dom";
+
+function EditPost() {
+  const [hasChanges, setHasChanges] = useState(false);
+  
+  useBeforeUnload(
+    useCallback(
+      (event) => {
+        if (hasChanges) {
+          event.preventDefault();
+          event.returnValue = "";
+        }
+      },
+      [hasChanges]
+    )
+  );
+  
+  return (
+    <Form method="post">
+      <input 
+        name="title" 
+        onChange={() => setHasChanges(true)}
+      />
+      <button type="submit" onClick={() => setHasChanges(false)}>
+        Save
+      </button>
+    </Form>
+  );
+}
+```
+
+### `useBlocker()`
+
+Hook for blocking navigation.
+
+#### Return Value
+```typescript
+function useBlocker(blocker: Blocker): void;
+
+interface Blocker {
+  (tx: Transition): void;
+}
+```
+
+#### Usage Examples
+
+**Blocking Navigation with Unsaved Changes**
+```typescript
+import { useBlocker } from "react-router-dom";
+
+function EditForm() {
+  const [hasChanges, setHasChanges] = useState(false);
+  
+  useBlocker(
+    useCallback(
+      (tx) => {
+        if (hasChanges) {
+          const confirmed = window.confirm(
+            "You have unsaved changes. Are you sure you want to leave?"
+          );
+          
+          if (confirmed) {
+            setHasChanges(false);
+            tx.retry();
+          }
+        }
+      },
+      [hasChanges]
+    )
+  );
+  
+  return (
+    <Form method="post">
+      <input 
+        name="title" 
+        onChange={() => setHasChanges(true)}
+      />
+      <button type="submit" onClick={() => setHasChanges(false)}>
+        Save
+      </button>
+    </Form>
+  );
+}
+```
+
+### `usePrompt()`
+
+Hook for prompting user before navigation.
+
+#### Return Value
+```typescript
+function usePrompt(when: boolean, message?: string): void;
+```
+
+#### Usage Examples
+
+**Simple Navigation Prompt**
+```typescript
+import { usePrompt } from "react-router-dom";
+
+function EditPage() {
+  const [hasChanges, setHasChanges] = useState(false);
+  
+  usePrompt(hasChanges, "You have unsaved changes. Are you sure?");
+  
+  return (
+    <Form method="post">
+      <input 
+        name="title" 
+        onChange={() => setHasChanges(true)}
+      />
+      <button type="submit" onClick={() => setHasChanges(false)}>
+        Save
+      </button>
+    </Form>
+  );
+}
+```
+
+## Advanced Hook Patterns
+
+### 1. **Custom Hook for Route Protection**
+```typescript
+function useRequireAuth(redirectTo = "/login") {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (!user) {
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, navigate, redirectTo]);
+  
+  return user;
+}
+```
+
+### 2. **Custom Hook for Query Parameters**
+```typescript
+function useQueryParam<T>(key: string, defaultValue: T): [T, (value: T) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const value = searchParams.get(key) as T || defaultValue;
+  
+  const setValue = useCallback((newValue: T) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (newValue === defaultValue) {
+        next.delete(key);
+      } else {
+        next.set(key, String(newValue));
+      }
+      return next;
+    });
+  }, [key, defaultValue, setSearchParams]);
+  
+  return [value, setValue];
+}
+```
+
+### 3. **Custom Hook for Route Data**
+```typescript
+function useRouteData<T>() {
+  const data = useLoaderData<T>();
+  const revalidator = useRevalidator();
+  
+  return {
+    data,
+    isLoading: revalidator.state === "loading",
+    refresh: revalidator.revalidate
+  };
+}
+```
+
+### 4. **Custom Hook for Form State**
+```typescript
+function useFormState<T = any>() {
+  const actionData = useActionData<T>();
+  const navigation = useNavigation();
+  
+  return {
+    actionData,
+    isSubmitting: navigation.state === "submitting",
+    isProcessing: navigation.state !== "idle"
+  };
+}
+```
+
+This comprehensive hooks reference provides detailed information about all React Router hooks, their return values, usage patterns, and practical examples for building robust routing solutions.
+description:
+globs:
+alwaysApply: false
+---

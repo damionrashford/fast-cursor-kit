@@ -1,0 +1,810 @@
+# FastMCP Development Patterns
+
+FastMCP provides powerful patterns and tools for building robust MCP applications. This guide covers development patterns, CLI usage, tutorials, and best practices.
+
+## Development Patterns
+
+### Tool Transformation Pattern
+
+Transform existing tools with additional functionality:
+
+```python
+from fastmcp import FastMCP, ToolTransformer
+
+mcp = FastMCP("Tool Transformation Server")
+
+# Original tool
+@mcp.tool
+def basic_calculation(a: int, b: int) -> int:
+    """Basic calculation"""
+    return a + b
+
+# Transform the tool
+transformer = ToolTransformer(mcp)
+
+@transformer.transform("basic_calculation")
+def enhanced_calculation(a: int, b: int) -> int:
+    """Enhanced calculation with validation and logging"""
+    # Pre-processing
+    if a < 0 or b < 0:
+        raise ValueError("Numbers must be positive")
+    
+    # Call original tool
+    result = basic_calculation(a, b)
+    
+    # Post-processing
+    print(f"Calculation: {a} + {b} = {result}")
+    
+    return result
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Method Decorator Pattern
+
+Use decorators to integrate functions with MCP:
+
+```python
+from fastmcp import FastMCP
+from functools import wraps
+
+mcp = FastMCP("Decorator Pattern Server")
+
+def mcp_tool(func):
+    """Decorator to register functions as MCP tools"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Pre-processing
+        print(f"Executing {func.__name__}")
+        
+        # Execute function
+        result = func(*args, **kwargs)
+        
+        # Post-processing
+        print(f"Completed {func.__name__}")
+        
+        return result
+    
+    # Register as MCP tool
+    mcp.add_tool(wrapper)
+    return wrapper
+
+@mcp_tool
+def business_function(data: dict) -> dict:
+    """Business logic function"""
+    return {"processed": True, "data": data}
+
+@mcp_tool
+def utility_function(text: str) -> str:
+    """Utility function"""
+    return text.upper()
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### REST API Transformation Pattern
+
+Transform REST APIs into MCP servers:
+
+```python
+from fastmcp import FastMCPOpenAPI
+
+# Transform REST API to MCP
+mcp = FastMCPOpenAPI(
+    "REST API Server",
+    openapi_url="https://api.example.com/openapi.json",
+    base_url="https://api.example.com",
+    transform_options={
+        "prefix_tools": True,
+        "include_resources": True,
+        "custom_headers": {
+            "Authorization": "Bearer your-token"
+        }
+    }
+)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Contrib Modules Pattern
+
+Use contrib modules for common functionality:
+
+```python
+from fastmcp import FastMCP
+from fastmcp.contrib.mcp_mixin import MCPMixin
+
+class MyService(MCPMixin):
+    """Service class with MCP integration"""
+    
+    def __init__(self):
+        self.mcp = FastMCP("My Service Server")
+        self.setup_tools()
+    
+    def setup_tools(self):
+        """Setup MCP tools"""
+        @self.mcp.tool
+        def service_operation(data: dict) -> dict:
+            """Service operation"""
+            return self.process_data(data)
+    
+    def process_data(self, data: dict) -> dict:
+        """Process data"""
+        return {"processed": True, "data": data}
+    
+    def run(self):
+        """Run the MCP server"""
+        self.mcp.run()
+
+# Use the service
+service = MyService()
+service.run()
+```
+
+## CLI Usage
+
+### Basic Commands
+
+FastMCP provides a comprehensive CLI for server management:
+
+```bash
+# Run a server
+fastmcp run server.py
+
+# Run with specific transport
+fastmcp run server.py --transport http --port 8000
+
+# Run with custom name
+fastmcp run server.py --name "My Custom Server"
+
+# Run with environment variables
+fastmcp run server.py --env-file .env
+```
+
+### Server Management
+
+```bash
+# List running servers
+fastmcp list
+
+# Stop a server
+fastmcp stop server_name
+
+# Restart a server
+fastmcp restart server_name
+
+# Check server status
+fastmcp status server_name
+```
+
+### Client Operations
+
+```bash
+# Connect to a server
+fastmcp connect server.py
+
+# List tools
+fastmcp tools server.py
+
+# Call a tool
+fastmcp call server.py add --a 2 --b 3
+
+# List resources
+fastmcp resources server.py
+
+# Read a resource
+fastmcp read server.py "file:///config.json"
+```
+
+### Development Tools
+
+```bash
+# Generate server template
+fastmcp generate server
+
+# Generate client template
+fastmcp generate client
+
+# Validate server configuration
+fastmcp validate server.py
+
+# Test server connectivity
+fastmcp test server.py
+```
+
+### Configuration
+
+```bash
+# Show configuration
+fastmcp config show
+
+# Set configuration
+fastmcp config set transport http
+
+# Reset configuration
+fastmcp config reset
+
+# Export configuration
+fastmcp config export config.json
+```
+
+## Tutorials
+
+### What is MCP?
+
+The Model Context Protocol (MCP) is a standardized way to provide context and tools to LLMs. FastMCP makes building MCP servers and clients simple and intuitive.
+
+**Key Concepts:**
+- **Tools**: Server-side functions that clients can execute
+- **Resources**: Data sources that clients can read
+- **Prompts**: Reusable message templates
+- **Transports**: Communication protocols (STDIO, HTTP, WebSocket)
+
+### Creating an MCP Server
+
+**Step 1: Install FastMCP**
+```bash
+pip install fastmcp
+```
+
+**Step 2: Create a Basic Server**
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("My First Server")
+
+@mcp.tool
+def hello(name: str) -> str:
+    """Say hello to someone"""
+    return f"Hello, {name}!"
+
+@mcp.resource
+def config() -> str:
+    """Get server configuration"""
+    return "server_config.json"
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+**Step 3: Run the Server**
+```bash
+python server.py
+```
+
+**Step 4: Test the Server**
+```bash
+fastmcp connect server.py
+fastmcp tools server.py
+fastmcp call server.py hello --name "World"
+```
+
+### Connect LLMs to REST APIs
+
+Transform REST APIs into MCP servers for LLM integration:
+
+```python
+from fastmcp import FastMCPOpenAPI
+
+# Create MCP server from OpenAPI specification
+mcp = FastMCPOpenAPI(
+    "API Server",
+    openapi_url="https://api.example.com/openapi.json",
+    base_url="https://api.example.com",
+    transform_options={
+        "prefix_tools": True,
+        "include_resources": True
+    }
+)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+**Usage:**
+```bash
+# Run the API server
+python api_server.py
+
+# Connect and use
+fastmcp connect api_server.py
+fastmcp tools api_server.py
+fastmcp call api_server.py api_get_users --limit 10
+```
+
+## Best Practices
+
+### Server Design
+
+1. **Use descriptive names** and docstrings for all components
+2. **Validate inputs** with Pydantic models
+3. **Handle errors gracefully** with proper exception handling
+4. **Keep tools focused** on single responsibilities
+5. **Use async for I/O operations**
+
+```python
+from fastmcp import FastMCP
+from pydantic import BaseModel
+from typing import Optional
+
+mcp = FastMCP("Best Practices Server")
+
+class UserData(BaseModel):
+    name: str
+    email: str
+    age: Optional[int] = None
+
+@mcp.tool
+async def process_user(user: UserData) -> dict:
+    """Process user data with validation"""
+    try:
+        # Process user data
+        result = await process_user_data(user)
+        return {"success": True, "data": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+```
+
+### Performance Optimization
+
+1. **Use connection pooling** for external services
+2. **Implement caching** for frequently accessed data
+3. **Use async operations** for I/O-bound tasks
+4. **Monitor response times** and optimize
+5. **Use appropriate timeouts** for external calls
+
+```python
+from fastmcp import FastMCP
+import asyncio
+from functools import lru_cache
+
+mcp = FastMCP("Performance Optimized Server")
+
+@lru_cache(maxsize=100)
+def expensive_calculation(data: str) -> str:
+    """Cache expensive calculations"""
+    # Expensive operation
+    return f"Processed: {data}"
+
+@mcp.tool
+async def optimized_operation(data: str) -> str:
+    """Optimized operation with caching"""
+    # Use cached calculation
+    result = expensive_calculation(data)
+    
+    # Async I/O operation
+    await asyncio.sleep(0.1)
+    
+    return result
+```
+
+### Security Best Practices
+
+1. **Validate all inputs** before processing
+2. **Use environment variables** for sensitive configuration
+3. **Implement proper authentication** and authorization
+4. **Use secure transports** (HTTPS, WSS)
+5. **Monitor for suspicious activity**
+
+```python
+import os
+from fastmcp import FastMCP, BearerAuthProvider
+
+# Secure server configuration
+auth_provider = BearerAuthProvider(
+    token=os.getenv("API_TOKEN"),
+    verify_token=lambda token: token == os.getenv("API_TOKEN")
+)
+
+mcp = FastMCP("Secure Server", auth_provider=auth_provider)
+
+@mcp.tool
+def secure_operation(data: dict) -> dict:
+    """Secure operation with input validation"""
+    # Validate input
+    if not isinstance(data, dict):
+        raise ValueError("Data must be a dictionary")
+    
+    # Process data
+    return {"processed": True, "data": data}
+```
+
+### Testing Strategies
+
+1. **Unit test individual components**
+2. **Integration test the full server**
+3. **Mock external dependencies**
+4. **Test error scenarios**
+5. **Use test fixtures and factories**
+
+```python
+import pytest
+from fastmcp import FastMCP, MockClient
+
+def test_tool_functionality():
+    """Test individual tool functionality"""
+    mcp = FastMCP("Test Server")
+    
+    @mcp.tool
+    def add(a: int, b: int) -> int:
+        return a + b
+    
+    result = add(2, 3)
+    assert result == 5
+
+async def test_server_integration():
+    """Test full server integration"""
+    # Start server
+    server_process = await asyncio.create_subprocess_exec(
+        "python", "server.py"
+    )
+    
+    # Test with client
+    async with MockClient() as client:
+        client.add_tool_response("add", {"a": 2, "b": 3}, 5)
+        
+        result = await client.call_tool("add", {"a": 2, "b": 3})
+        assert result.data == 5
+    
+    # Cleanup
+    server_process.terminate()
+    await server_process.wait()
+```
+
+### Deployment Best Practices
+
+1. **Use environment-specific configurations**
+2. **Implement health checks**
+3. **Use proper logging and monitoring**
+4. **Set up automated deployments**
+5. **Monitor performance and errors**
+
+```python
+import os
+import logging
+from fastmcp import FastMCP
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Environment-specific configuration
+environment = os.getenv("ENVIRONMENT", "development")
+
+if environment == "production":
+    # Production configuration
+    mcp = FastMCP(
+        "Production Server",
+        version="1.0.0",
+        description="Production MCP server"
+    )
+    
+    # Add production middleware
+    mcp.add_middleware(LoggingMiddleware())
+    mcp.add_middleware(RateLimitMiddleware())
+else:
+    # Development configuration
+    mcp = FastMCP("Development Server")
+
+@mcp.tool
+def health_check() -> dict:
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "environment": environment,
+        "version": "1.0.0"
+    }
+
+if __name__ == "__main__":
+    mcp.run(
+        port=int(os.getenv("PORT", 8000)),
+        host=os.getenv("HOST", "0.0.0.0")
+    )
+```
+
+## Advanced Patterns
+
+### Middleware Pattern
+
+Implement cross-cutting concerns with middleware:
+
+```python
+from fastmcp import FastMCP, Middleware
+import time
+import logging
+
+class TimingMiddleware(Middleware):
+    """Middleware to measure execution time"""
+    
+    async def handle_tool_call(self, tool_name: str, arguments: dict, context):
+        start_time = time.time()
+        
+        try:
+            result = await self.next.handle_tool_call(tool_name, arguments, context)
+            
+            execution_time = time.time() - start_time
+            logging.info(f"Tool {tool_name} executed in {execution_time:.2f}s")
+            
+            return result
+        except Exception as e:
+            execution_time = time.time() - start_time
+            logging.error(f"Tool {tool_name} failed after {execution_time:.2f}s: {e}")
+            raise
+
+class LoggingMiddleware(Middleware):
+    """Middleware for request logging"""
+    
+    async def handle_tool_call(self, tool_name: str, arguments: dict, context):
+        logging.info(f"Tool call: {tool_name} with args: {arguments}")
+        
+        result = await self.next.handle_tool_call(tool_name, arguments, context)
+        
+        logging.info(f"Tool result: {result}")
+        return result
+
+# Use middleware
+mcp = FastMCP("Middleware Server")
+mcp.add_middleware(TimingMiddleware())
+mcp.add_middleware(LoggingMiddleware())
+```
+
+### Plugin Pattern
+
+Create extensible servers with plugins:
+
+```python
+from fastmcp import FastMCP
+from abc import ABC, abstractmethod
+
+class MCPPlugin(ABC):
+    """Base class for MCP plugins"""
+    
+    @abstractmethod
+    def register(self, mcp: FastMCP):
+        """Register the plugin with the MCP server"""
+        pass
+
+class DatabasePlugin(MCPPlugin):
+    """Plugin for database operations"""
+    
+    def __init__(self, connection_string: str):
+        self.connection_string = connection_string
+    
+    def register(self, mcp: FastMCP):
+        @mcp.tool
+        def query_database(query: str) -> list:
+            """Execute database query"""
+            # Database implementation
+            return [{"result": "data"}]
+
+class FileSystemPlugin(MCPPlugin):
+    """Plugin for file system operations"""
+    
+    def register(self, mcp: FastMCP):
+        @mcp.tool
+        def read_file(path: str) -> str:
+            """Read file content"""
+            with open(path, 'r') as f:
+                return f.read()
+
+# Use plugins
+mcp = FastMCP("Plugin Server")
+
+# Register plugins
+db_plugin = DatabasePlugin("sqlite:///data.db")
+db_plugin.register(mcp)
+
+fs_plugin = FileSystemPlugin()
+fs_plugin.register(mcp)
+```
+
+### Factory Pattern
+
+Create servers using factory pattern:
+
+```python
+from fastmcp import FastMCP
+from typing import Dict, Any
+
+class MCPFactory:
+    """Factory for creating MCP servers"""
+    
+    @staticmethod
+    def create_server(server_type: str, config: Dict[str, Any]) -> FastMCP:
+        """Create server based on type and configuration"""
+        
+        if server_type == "basic":
+            return MCPFactory._create_basic_server(config)
+        elif server_type == "api":
+            return MCPFactory._create_api_server(config)
+        elif server_type == "database":
+            return MCPFactory._create_database_server(config)
+        else:
+            raise ValueError(f"Unknown server type: {server_type}")
+    
+    @staticmethod
+    def _create_basic_server(config: Dict[str, Any]) -> FastMCP:
+        """Create basic server"""
+        mcp = FastMCP(
+            config.get("name", "Basic Server"),
+            version=config.get("version", "1.0.0")
+        )
+        
+        @mcp.tool
+        def basic_operation(data: dict) -> dict:
+            return {"processed": True, "data": data}
+        
+        return mcp
+    
+    @staticmethod
+    def _create_api_server(config: Dict[str, Any]) -> FastMCP:
+        """Create API server"""
+        from fastmcp import FastMCPOpenAPI
+        
+        return FastMCPOpenAPI(
+            config.get("name", "API Server"),
+            openapi_url=config["openapi_url"],
+            base_url=config["base_url"]
+        )
+    
+    @staticmethod
+    def _create_database_server(config: Dict[str, Any]) -> FastMCP:
+        """Create database server"""
+        mcp = FastMCP(
+            config.get("name", "Database Server"),
+            version=config.get("version", "1.0.0")
+        )
+        
+        # Add database tools
+        @mcp.tool
+        def query_database(query: str) -> list:
+            # Database implementation
+            return [{"result": "data"}]
+        
+        return mcp
+
+# Use factory
+config = {
+    "name": "My Server",
+    "version": "1.0.0",
+    "openapi_url": "https://api.example.com/openapi.json",
+    "base_url": "https://api.example.com"
+}
+
+server = MCPFactory.create_server("api", config)
+server.run()
+```
+
+## Code Organization
+
+### Project Structure
+
+Organize FastMCP projects with a clear structure:
+
+```
+my-mcp-project/
+├── src/
+│   ├── __init__.py
+│   ├── server.py
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── database.py
+│   │   ├── filesystem.py
+│   │   └── api.py
+│   ├── resources/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   └── templates.py
+│   ├── prompts/
+│   │   ├── __init__.py
+│   │   ├── analysis.py
+│   │   └── generation.py
+│   └── middleware/
+│       ├── __init__.py
+│       ├── logging.py
+│       ├── auth.py
+│       └── rate_limit.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_tools.py
+│   ├── test_resources.py
+│   └── test_prompts.py
+├── config/
+│   ├── development.yaml
+│   ├── production.yaml
+│   └── test.yaml
+├── requirements.txt
+├── setup.py
+└── README.md
+```
+
+### Module Organization
+
+Organize code into logical modules:
+
+```python
+# src/server.py
+from fastmcp import FastMCP
+from .tools import database, filesystem, api
+from .resources import config, templates
+from .prompts import analysis, generation
+from .middleware import logging, auth, rate_limit
+
+def create_server() -> FastMCP:
+    """Create and configure the MCP server"""
+    mcp = FastMCP("My MCP Server")
+    
+    # Register tools
+    database.register(mcp)
+    filesystem.register(mcp)
+    api.register(mcp)
+    
+    # Register resources
+    config.register(mcp)
+    templates.register(mcp)
+    
+    # Register prompts
+    analysis.register(mcp)
+    generation.register(mcp)
+    
+    # Add middleware
+    mcp.add_middleware(logging.LoggingMiddleware())
+    mcp.add_middleware(auth.AuthMiddleware())
+    mcp.add_middleware(rate_limit.RateLimitMiddleware())
+    
+    return mcp
+
+if __name__ == "__main__":
+    server = create_server()
+    server.run()
+```
+
+### Configuration Management
+
+Manage configuration across environments:
+
+```python
+# src/config.py
+import yaml
+import os
+from typing import Dict, Any
+
+class Config:
+    """Configuration management"""
+    
+    def __init__(self, environment: str = None):
+        self.environment = environment or os.getenv("ENVIRONMENT", "development")
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from file"""
+        config_path = f"config/{self.environment}.yaml"
+        
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get configuration value"""
+        return self.config.get(key, default)
+    
+    def get_database_url(self) -> str:
+        """Get database URL"""
+        return self.get("database", {}).get("url", "sqlite:///data.db")
+    
+    def get_api_key(self) -> str:
+        """Get API key"""
+        return self.get("api", {}).get("key", "")
+
+# Use configuration
+config = Config()
+mcp = FastMCP("Configured Server")
+
+# Use config values
+database_url = config.get_database_url()
+api_key = config.get_api_key()
+```

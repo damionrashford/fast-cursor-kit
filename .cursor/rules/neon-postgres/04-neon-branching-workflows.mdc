@@ -1,0 +1,660 @@
+# Neon Database Branching and Workflows
+
+## Database Branching Overview
+
+Neon's database branching feature allows you to create independent copies of your database, similar to Git branches. Each branch is a complete, isolated database that can be used for development, testing, or experimentation.
+
+## Branching Concepts
+
+### 1. **Branch Types**
+
+```python
+from neon_api import NeonAPI
+
+neon = NeonAPI(api_key="your_api_key")
+
+# Main branch (production)
+main_branch = neon.get_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id"
+)
+
+# Development branch
+dev_branch = neon.create_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_name="development",
+    parent_id="br-main-branch-id"
+)
+
+# Feature branch
+feature_branch = neon.create_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_name="feature/user-authentication",
+    parent_id="br-main-branch-id"
+)
+
+# Staging branch
+staging_branch = neon.create_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_name="staging",
+    parent_id="br-main-branch-id"
+)
+```
+
+### 2. **Branch Hierarchy**
+
+```typescript
+// Branch hierarchy example
+main (production)
+├── development
+│   ├── feature/user-auth
+│   ├── feature/payment-system
+│   └── bugfix/login-issue
+├── staging
+└── testing
+    ├── unit-tests
+    └── integration-tests
+```
+
+## Development Workflows
+
+### 1. **Feature Branch Workflow**
+
+```python
+class FeatureBranchWorkflow:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_feature_branch(self, feature_name: str):
+        """Create a new feature branch from main"""
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"feature/{feature_name}",
+            parent_id="br-main-branch-id"
+        )
+        
+        return {
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "connection_string": branch.connection_string,
+            "host": branch.host
+        }
+    
+    def merge_feature_to_main(self, feature_branch_id: str):
+        """Merge feature branch back to main (promote branch)"""
+        # In Neon, you promote a branch to become the new main
+        promoted_branch = self.neon.promote_branch(
+            project_id=self.project_id,
+            branch_id=feature_branch_id
+        )
+        
+        return promoted_branch
+    
+    def delete_feature_branch(self, branch_id: str):
+        """Delete feature branch after merge"""
+        self.neon.delete_branch(
+            project_id=self.project_id,
+            branch_id=branch_id
+        )
+
+# Usage
+workflow = FeatureBranchWorkflow(neon, "ep-cool-darkness-123456")
+
+# Create feature branch
+feature = workflow.create_feature_branch("user-authentication")
+print(f"Feature branch created: {feature['branch_name']}")
+
+# Work on feature...
+# ... development work ...
+
+# Merge to main
+workflow.merge_feature_to_main(feature['branch_id'])
+
+# Clean up
+workflow.delete_feature_branch(feature['branch_id'])
+```
+
+### 2. **Environment-Based Branching**
+
+```python
+class EnvironmentBranching:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+        self.environments = {}
+    
+    def setup_environments(self):
+        """Setup environment branches"""
+        environments = ["development", "staging", "production"]
+        
+        for env in environments:
+            if env == "production":
+                # Production is the main branch
+                self.environments[env] = "br-main-branch-id"
+            else:
+                # Create environment branch from main
+                branch = self.neon.create_branch(
+                    project_id=self.project_id,
+                    branch_name=env,
+                    parent_id="br-main-branch-id"
+                )
+                self.environments[env] = branch.id
+        
+        return self.environments
+    
+    def promote_to_environment(self, from_branch_id: str, to_environment: str):
+        """Promote a branch to a specific environment"""
+        if to_environment == "production":
+            # Promote to main
+            return self.neon.promote_branch(
+                project_id=self.project_id,
+                branch_id=from_branch_id
+            )
+        else:
+            # Create new branch in target environment
+            env_branch = self.neon.create_branch(
+                project_id=self.project_id,
+                branch_name=f"{to_environment}-{int(time.time())}",
+                parent_id=from_branch_id
+            )
+            return env_branch
+    
+    def get_environment_connection(self, environment: str):
+        """Get connection string for environment"""
+        branch_id = self.environments.get(environment)
+        if not branch_id:
+            raise ValueError(f"Environment {environment} not found")
+        
+        branch = self.neon.get_branch(
+            project_id=self.project_id,
+            branch_id=branch_id
+        )
+        
+        return branch.connection_string
+
+# Usage
+env_branching = EnvironmentBranching(neon, "ep-cool-darkness-123456")
+environments = env_branching.setup_environments()
+
+# Get development connection
+dev_conn = env_branching.get_environment_connection("development")
+print(f"Development DB: {dev_conn}")
+```
+
+### 3. **CI/CD Integration**
+
+```yaml
+# .github/workflows/neon-branching.yml
+name: Neon Database Branching
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  create-db-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create Neon branch
+        uses: neondatabase/create-branch@v1
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch_name: pr-${{ github.event.number }}
+          parent_id: ${{ secrets.NEON_MAIN_BRANCH_ID }}
+        id: create-branch
+      
+      - name: Run database migrations
+        run: |
+          echo "DATABASE_URL=${{ steps.create-branch.outputs.db_url }}" >> $GITHUB_ENV
+          npm run migrate
+      
+      - name: Run tests
+        run: |
+          npm run test
+        env:
+          DATABASE_URL: ${{ steps.create-branch.outputs.db_url }}
+      
+      - name: Cleanup branch
+        if: always()
+        uses: neondatabase/delete-branch@v1
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch_id: ${{ steps.create-branch.outputs.branch_id }}
+```
+
+```python
+# neon_ci_cd.py
+import os
+import sys
+from neon_api import NeonAPI
+
+class NeonCICD:
+    def __init__(self, api_key: str, project_id: str):
+        self.neon = NeonAPI(api_key=api_key)
+        self.project_id = project_id
+    
+    def create_pr_branch(self, pr_number: int):
+        """Create database branch for pull request"""
+        branch_name = f"pr-{pr_number}"
+        
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=branch_name,
+            parent_id=os.getenv("NEON_MAIN_BRANCH_ID")
+        )
+        
+        # Set output for GitHub Actions
+        print(f"::set-output name=branch_id::{branch.id}")
+        print(f"::set-output name=db_url::{branch.connection_string}")
+        
+        return branch
+    
+    def run_migrations(self, connection_string: str):
+        """Run database migrations on branch"""
+        # Example using Alembic
+        os.environ["DATABASE_URL"] = connection_string
+        
+        # Run migrations
+        os.system("alembic upgrade head")
+    
+    def run_tests(self, connection_string: str):
+        """Run tests against branch database"""
+        os.environ["DATABASE_URL"] = connection_string
+        
+        # Run test suite
+        result = os.system("pytest")
+        
+        if result != 0:
+            raise Exception("Tests failed")
+    
+    def cleanup_branch(self, branch_id: str):
+        """Delete branch after CI/CD completes"""
+        self.neon.delete_branch(
+            project_id=self.project_id,
+            branch_id=branch_id
+        )
+
+# Usage in CI/CD
+if __name__ == "__main__":
+    api_key = os.getenv("NEON_API_KEY")
+    project_id = os.getenv("NEON_PROJECT_ID")
+    pr_number = int(os.getenv("PR_NUMBER", "0"))
+    
+    ci_cd = NeonCICD(api_key, project_id)
+    
+    try:
+        # Create branch
+        branch = ci_cd.create_pr_branch(pr_number)
+        
+        # Run migrations
+        ci_cd.run_migrations(branch.connection_string)
+        
+        # Run tests
+        ci_cd.run_tests(branch.connection_string)
+        
+    finally:
+        # Cleanup
+        if 'branch' in locals():
+            ci_cd.cleanup_branch(branch.id)
+```
+
+## Branch Management Patterns
+
+### 1. **Branch Lifecycle Management**
+
+```python
+class BranchLifecycleManager:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_development_branch(self, feature_name: str):
+        """Create development branch with proper naming"""
+        timestamp = int(time.time())
+        branch_name = f"dev/{feature_name}-{timestamp}"
+        
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=branch_name,
+            parent_id="br-main-branch-id"
+        )
+        
+        return {
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "connection_string": branch.connection_string,
+            "created_at": timestamp
+        }
+    
+    def promote_to_staging(self, branch_id: str):
+        """Promote branch to staging environment"""
+        staging_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"staging-{int(time.time())}",
+            parent_id=branch_id
+        )
+        
+        return staging_branch
+    
+    def promote_to_production(self, branch_id: str):
+        """Promote branch to production (main)"""
+        promoted = self.neon.promote_branch(
+            project_id=self.project_id,
+            branch_id=branch_id
+        )
+        
+        return promoted
+    
+    def cleanup_old_branches(self, days_old: int = 7):
+        """Clean up old branches"""
+        branches = self.neon.list_branches(project_id=self.project_id)
+        cutoff_time = time.time() - (days_old * 24 * 60 * 60)
+        
+        for branch in branches:
+            if branch.created_at.timestamp() < cutoff_time:
+                if branch.name.startswith("dev/") or branch.name.startswith("staging-"):
+                    self.neon.delete_branch(
+                        project_id=self.project_id,
+                        branch_id=branch.id
+                    )
+                    print(f"Deleted old branch: {branch.name}")
+
+# Usage
+lifecycle_manager = BranchLifecycleManager(neon, "ep-cool-darkness-123456")
+
+# Create development branch
+dev_branch = lifecycle_manager.create_development_branch("user-auth")
+
+# Work on feature...
+# ... development work ...
+
+# Promote to staging
+staging_branch = lifecycle_manager.promote_to_staging(dev_branch["branch_id"])
+
+# Test in staging...
+# ... testing work ...
+
+# Promote to production
+lifecycle_manager.promote_to_production(staging_branch.id)
+
+# Cleanup old branches
+lifecycle_manager.cleanup_old_branches(days_old=7)
+```
+
+### 2. **Branch Synchronization**
+
+```python
+class BranchSynchronizer:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def sync_branch_from_main(self, branch_id: str):
+        """Sync branch with latest changes from main"""
+        # Create new branch from main
+        new_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"sync-{int(time.time())}",
+            parent_id="br-main-branch-id"
+        )
+        
+        # Copy data from old branch to new branch
+        # This would require custom logic to copy specific data
+        
+        return new_branch
+    
+    def merge_changes(self, source_branch_id: str, target_branch_id: str):
+        """Merge changes between branches"""
+        # Create merge branch
+        merge_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"merge-{int(time.time())}",
+            parent_id=target_branch_id
+        )
+        
+        # Apply changes from source to merge branch
+        # This would require custom logic to apply specific changes
+        
+        return merge_branch
+
+# Usage
+synchronizer = BranchSynchronizer(neon, "ep-cool-darkness-123456")
+
+# Sync feature branch with main
+synced_branch = synchronizer.sync_branch_from_main("br-feature-branch-id")
+
+# Merge changes
+merge_branch = synchronizer.merge_changes(
+    "br-feature-branch-id",
+    "br-main-branch-id"
+)
+```
+
+### 3. **Branch Monitoring and Analytics**
+
+```python
+class BranchMonitor:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def get_branch_analytics(self):
+        """Get analytics for all branches"""
+        branches = self.neon.list_branches(project_id=self.project_id)
+        
+        analytics = {
+            "total_branches": len(branches),
+            "branches_by_type": {},
+            "oldest_branch": None,
+            "newest_branch": None,
+            "branch_ages": []
+        }
+        
+        for branch in branches:
+            # Categorize branches
+            if branch.name.startswith("dev/"):
+                branch_type = "development"
+            elif branch.name.startswith("feature/"):
+                branch_type = "feature"
+            elif branch.name.startswith("staging"):
+                branch_type = "staging"
+            else:
+                branch_type = "other"
+            
+            analytics["branches_by_type"][branch_type] = analytics["branches_by_type"].get(branch_type, 0) + 1
+            
+            # Track ages
+            age_days = (time.time() - branch.created_at.timestamp()) / (24 * 60 * 60)
+            analytics["branch_ages"].append({
+                "branch_name": branch.name,
+                "age_days": age_days,
+                "created_at": branch.created_at.isoformat()
+            })
+        
+        # Find oldest and newest
+        if analytics["branch_ages"]:
+            oldest = min(analytics["branch_ages"], key=lambda x: x["age_days"])
+            newest = max(analytics["branch_ages"], key=lambda x: x["age_days"])
+            analytics["oldest_branch"] = oldest
+            analytics["newest_branch"] = newest
+        
+        return analytics
+    
+    def get_branch_health_report(self):
+        """Generate health report for branches"""
+        analytics = self.get_branch_analytics()
+        
+        report = {
+            "summary": f"Project has {analytics['total_branches']} branches",
+            "recommendations": [],
+            "warnings": []
+        }
+        
+        # Check for old branches
+        old_branches = [b for b in analytics["branch_ages"] if b["age_days"] > 30]
+        if old_branches:
+            report["warnings"].append(f"Found {len(old_branches)} branches older than 30 days")
+            report["recommendations"].append("Consider cleaning up old development branches")
+        
+        # Check branch distribution
+        dev_branches = analytics["branches_by_type"].get("development", 0)
+        if dev_branches > 10:
+            report["warnings"].append(f"High number of development branches: {dev_branches}")
+            report["recommendations"].append("Consider merging or cleaning up development branches")
+        
+        return report
+
+# Usage
+monitor = BranchMonitor(neon, "ep-cool-darkness-123456")
+
+# Get analytics
+analytics = monitor.get_branch_analytics()
+print(f"Total branches: {analytics['total_branches']}")
+
+# Get health report
+health_report = monitor.get_branch_health_report()
+print(f"Health report: {health_report['summary']}")
+for warning in health_report['warnings']:
+    print(f"Warning: {warning}")
+```
+
+## Advanced Branching Patterns
+
+### 1. **Multi-Tenant Branching**
+
+```python
+class MultiTenantBranching:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_tenant_branch(self, tenant_id: str):
+        """Create branch for specific tenant"""
+        branch_name = f"tenant/{tenant_id}"
+        
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=branch_name,
+            parent_id="br-main-branch-id"
+        )
+        
+        return {
+            "tenant_id": tenant_id,
+            "branch_id": branch.id,
+            "connection_string": branch.connection_string
+        }
+    
+    def get_tenant_connection(self, tenant_id: str):
+        """Get connection string for tenant"""
+        branches = self.neon.list_branches(project_id=self.project_id)
+        
+        for branch in branches:
+            if branch.name == f"tenant/{tenant_id}":
+                return branch.connection_string
+        
+        # Create if not exists
+        tenant_branch = self.create_tenant_branch(tenant_id)
+        return tenant_branch["connection_string"]
+    
+    def sync_tenant_with_main(self, tenant_id: str):
+        """Sync tenant branch with main branch"""
+        tenant_branch_name = f"tenant/{tenant_id}"
+        
+        # Create new branch from main
+        new_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"{tenant_branch_name}-sync-{int(time.time())}",
+            parent_id="br-main-branch-id"
+        )
+        
+        return new_branch
+
+# Usage
+multi_tenant = MultiTenantBranching(neon, "ep-cool-darkness-123456")
+
+# Create tenant branch
+tenant_branch = multi_tenant.create_tenant_branch("acme-corp")
+
+# Get tenant connection
+connection = multi_tenant.get_tenant_connection("acme-corp")
+```
+
+### 2. **Data Migration Branching**
+
+```python
+class DataMigrationBranching:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_migration_branch(self, migration_name: str):
+        """Create branch for data migration"""
+        branch_name = f"migration/{migration_name}"
+        
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=branch_name,
+            parent_id="br-main-branch-id"
+        )
+        
+        return {
+            "migration_name": migration_name,
+            "branch_id": branch.id,
+            "connection_string": branch.connection_string
+        }
+    
+    def test_migration(self, migration_branch_id: str):
+        """Test migration on branch"""
+        # Connect to migration branch
+        branch = self.neon.get_branch(
+            project_id=self.project_id,
+            branch_id=migration_branch_id
+        )
+        
+        # Run migration tests
+        # This would include your migration logic
+        
+        return {
+            "status": "success",
+            "tests_passed": True,
+            "migration_safe": True
+        }
+    
+    def apply_migration_to_main(self, migration_branch_id: str):
+        """Apply tested migration to main branch"""
+        # Promote migration branch to main
+        promoted = self.neon.promote_branch(
+            project_id=self.project_id,
+            branch_id=migration_branch_id
+        )
+        
+        return promoted
+
+# Usage
+migration_branching = DataMigrationBranching(neon, "ep-cool-darkness-123456")
+
+# Create migration branch
+migration_branch = migration_branching.create_migration_branch("user-schema-update")
+
+# Test migration
+test_result = migration_branching.test_migration(migration_branch["branch_id"])
+
+if test_result["migration_safe"]:
+    # Apply to main
+    migration_branching.apply_migration_to_main(migration_branch["branch_id"])
+```
+
+This comprehensive branching and workflows guide covers all aspects of Neon's database branching feature, from basic concepts to advanced patterns for CI/CD, multi-tenancy, and data migrations.
+description: Complete guide to Neon database branching, workflows, and development patterns
+globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.sql", "**/*.yaml", "**/*.yml", "**/*.json"]
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

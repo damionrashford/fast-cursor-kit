@@ -1,0 +1,188 @@
+# FastAPI Framework Overview
+
+## What is FastAPI?
+
+FastAPI is a modern, fast (high-performance), web framework for building APIs with Python based on standard Python type hints. It's designed to be easy to use and learn while providing excellent performance and developer experience.
+
+## Key Features
+
+### 1. **Fast**: Very high performance, on par with NodeJS and Go
+- Built on Starlette and Pydantic
+- One of the fastest Python frameworks available
+- Independent TechEmpower benchmarks show FastAPI as one of the fastest Python frameworks
+
+### 2. **Fast to code**: Increase development speed by 200% to 300%
+- Automatic code generation from type hints
+- Less boilerplate code
+- Intuitive API design
+
+### 3. **Fewer bugs**: Reduce about 40% of human (developer) induced errors
+- Automatic validation
+- Type checking at runtime
+- Clear error messages
+
+### 4. **Intuitive**: Great editor support
+- Completion everywhere
+- Less time debugging
+- Excellent IDE integration
+
+### 5. **Easy**: Designed to be easy to use and learn
+- Less time reading docs
+- Standard Python types
+- No new syntax to learn
+
+### 6. **Short**: Minimize code duplication
+- Multiple features from each parameter declaration
+- Automatic documentation generation
+- Built-in validation
+
+### 7. **Robust**: Get production-ready code
+- Automatic interactive documentation
+- Built-in testing support
+- Production-ready by default
+
+### 8. **Standards-based**: Based on (and fully compatible with) open standards
+- OpenAPI (previously known as Swagger)
+- JSON Schema
+- OAuth2 with JWT tokens
+- HTTP Basic auth
+
+## Core Dependencies
+
+### Standard Dependencies
+When you install FastAPI with `pip install "fastapi[standard]"`:
+
+**Used by Pydantic:**
+- `email-validator` - for email validation
+
+**Used by Starlette:**
+- `httpx` - Required for TestClient
+- `jinja2` - Required for default template configuration
+- `python-multipart` - Required for form parsing
+
+**Used by FastAPI:**
+- `uvicorn` - ASGI server with high performance
+- `fastapi-cli[standard]` - provides the `fastapi` command
+
+### Additional Optional Dependencies
+
+**Pydantic extras:**
+- `pydantic-settings` - for settings management
+- `pydantic-extra-types` - for extra types
+
+**FastAPI extras:**
+- `orjson` - for ORJSONResponse
+- `ujson` - for UJSONResponse
+
+## Basic Example
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Union
+
+app = FastAPI()
+
+class Item(BaseModel):
+    name: str
+    price: float
+    is_offer: Union[bool, None] = None
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int, q: Union[str, None] = None):
+    return {"item_id": item_id, "q": q}
+
+@app.put("/items/{item_id}")
+def update_item(item_id: int, item: Item):
+    return {"item_name": item.name, "item_id": item_id}
+```
+
+## What You Get Automatically
+
+With just the type declarations, FastAPI provides:
+
+### Editor Support
+- **Completion**: Auto-complete in your IDE
+- **Type checks**: Catch errors before runtime
+- **IntelliSense**: Smart suggestions
+
+### Data Validation
+- **Automatic validation**: Clear errors for invalid data
+- **Deep validation**: Works for nested JSON objects
+- **Type conversion**: Network data to Python types
+
+### Data Conversion
+- **Input conversion**: JSON, path params, query params, cookies, headers, forms, files
+- **Output conversion**: Python types to JSON, datetime, UUID, database models
+
+### Automatic Documentation
+- **Interactive API docs**: Swagger UI at `/docs`
+- **Alternative docs**: ReDoc at `/redoc`
+- **OpenAPI schema**: Machine-readable API specification
+
+## Performance
+
+FastAPI applications running under Uvicorn are among the fastest Python frameworks available, only below Starlette and Uvicorn themselves (which FastAPI uses internally).
+
+## Installation
+
+```bash
+# Standard installation with all dependencies
+pip install "fastapi[standard]"
+
+# Minimal installation
+pip install fastapi
+
+# With additional performance
+pip install "fastapi[standard]" uvicorn[standard]
+```
+
+## Running Your Application
+
+```bash
+# Development server with auto-reload
+uvicorn main:app --reload
+
+# Production server
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+# With FastAPI CLI
+fastapi dev main.py
+```
+
+## Interactive Documentation
+
+Once your app is running, visit:
+- **Swagger UI**: http://127.0.0.1:8000/docs
+- **ReDoc**: http://127.0.0.1:8000/redoc
+
+These provide interactive documentation where you can:
+- See all your endpoints
+- Test the API directly
+- View request/response schemas
+- Understand the API structure
+
+## Why FastAPI?
+
+1. **Performance**: As fast as NodeJS and Go
+2. **Developer Experience**: Excellent tooling and debugging
+3. **Standards**: Based on open standards (OpenAPI, JSON Schema)
+4. **Production Ready**: Built for real-world applications
+5. **Type Safety**: Leverages Python type hints
+6. **Documentation**: Automatic, interactive API docs
+7. **Testing**: Built-in testing support
+8. **Security**: OAuth2, JWT, HTTP Basic auth support
+
+FastAPI is the modern way to build APIs in Python - fast, reliable, and developer-friendly.
+
+---
+
+*Source: [https://fastapi.tiangolo.com/](https://fastapi.tiangolo.com/)*
+description:
+globs:
+alwaysApply: false
+---

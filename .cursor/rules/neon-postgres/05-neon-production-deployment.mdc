@@ -1,0 +1,725 @@
+# Neon Production Deployment and Best Practices
+
+## Production Readiness Checklist
+
+### 1. **Security Configuration**
+
+#### SSL/TLS Configuration
+```python
+# Production connection string with SSL
+DATABASE_URL = (
+    "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname"
+    "?sslmode=require"
+    "&sslcert=/path/to/client-cert.pem"
+    "&sslkey=/path/to/client-key.pem"
+    "&sslrootcert=/path/to/ca-cert.pem"
+)
+
+# Python connection with SSL verification
+import psycopg2
+import ssl
+
+ssl_context = ssl.create_default_context(
+    ssl.Purpose.SERVER_AUTH,
+    cafile="/path/to/ca-cert.pem"
+)
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+ssl_context.check_hostname = True
+
+conn = psycopg2.connect(
+    "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname",
+    ssl_context=ssl_context
+)
+```
+
+#### Row-Level Security (RLS)
+```sql
+-- Enable RLS on tables
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY user_isolation_policy ON users
+    FOR ALL
+    USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+CREATE POLICY user_read_policy ON users
+    FOR SELECT
+    USING (id = current_setting('app.user_id')::integer);
+
+-- Set application context
+SELECT set_config('app.tenant_id', '123e4567-e89b-12d3-a456-426614174000', false);
+SELECT set_config('app.user_id', '42', false);
+```
+
+#### Connection Pooling Security
+```python
+# Secure connection pooling
+import psycopg2
+from psycopg2 import pool
+import os
+
+class SecureNeonPool:
+    def __init__(self):
+        self.pool = psycopg2.pool.SimpleConnectionPool(
+            1, 20,  # min, max connections
+            os.getenv('DATABASE_URL'),
+            options='-c search_path=public',
+            sslmode='require',
+            sslcert='/path/to/client-cert.pem',
+            sslkey='/path/to/client-key.pem',
+            sslrootcert='/path/to/ca-cert.pem'
+        )
+    
+    def get_connection(self):
+        conn = self.pool.getconn()
+        # Set secure session parameters
+        conn.cursor().execute("SET SESSION app.tenant_id = %s", (os.getenv('TENANT_ID'),))
+        return conn
+    
+    def return_connection(self, conn):
+        # Clear sensitive session data
+        conn.cursor().execute("RESET SESSION app.tenant_id")
+        self.pool.putconn(conn)
+```
+
+### 2. **Performance Optimization**
+
+#### Connection Pooling
+```python
+# Production connection pooling
+import psycopg2
+from psycopg2 import pool
+import os
+
+class ProductionNeonPool:
+    def __init__(self):
+        self.pool = psycopg2.pool.SimpleConnectionPool(
+            5,  # min connections
+            50, # max connections
+            os.getenv('DATABASE_URL'),
+            options='-c search_path=public',
+            sslmode='require',
+            connect_timeout=10,
+            application_name='my-app-production'
+        )
+    
+    def get_connection(self):
+        return self.pool.getconn()
+    
+    def return_connection(self, conn):
+        self.pool.putconn(conn)
+    
+    def close_all(self):
+        self.pool.closeall()
+
+# Usage
+pool = ProductionNeonPool()
+
+def execute_query(query, params=None):
+    conn = pool.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        result = cursor.fetchall()
+        conn.commit()
+        return result
+    finally:
+        pool.return_connection(conn)
+```
+
+#### Query Optimization
+```sql
+-- Create indexes for performance
+CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+CREATE INDEX CONCURRENTLY idx_users_tenant_id ON users(tenant_id);
+CREATE INDEX CONCURRENTLY idx_posts_author_created ON posts(author_id, created_at);
+
+-- Use covering indexes
+CREATE INDEX CONCURRENTLY idx_users_covering ON users(tenant_id, email, name) 
+    INCLUDE (created_at, updated_at);
+
+-- Partition large tables
+CREATE TABLE posts_partitioned (
+    id SERIAL,
+    title VARCHAR(255),
+    content TEXT,
+    author_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE posts_2024_01 PARTITION OF posts_partitioned
+    FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+```
+
+#### Monitoring and Metrics
+```python
+# Database performance monitoring
+import time
+import psycopg2
+from contextlib import contextmanager
+
+class NeonPerformanceMonitor:
+    def __init__(self, connection_string: str):
+        self.connection_string = connection_string
+    
+    @contextmanager
+    def timed_query(self, query_name: str):
+        """Context manager for timing queries"""
+        start_time = time.time()
+        try:
+            yield
+        finally:
+            duration = time.time() - start_time
+            print(f"Query '{query_name}' took {duration:.3f} seconds")
+    
+    def get_slow_queries(self):
+        """Get slow queries from pg_stat_statements"""
+        conn = psycopg2.connect(self.connection_string)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                query,
+                calls,
+                total_time,
+                mean_time,
+                rows
+            FROM pg_stat_statements 
+            WHERE mean_time > 100  -- queries taking more than 100ms
+            ORDER BY mean_time DESC
+            LIMIT 10
+        """)
+        
+        return cursor.fetchall()
+    
+    def get_connection_stats(self):
+        """Get connection statistics"""
+        conn = psycopg2.connect(self.connection_string)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                state,
+                count(*)
+            FROM pg_stat_activity 
+            GROUP BY state
+        """)
+        
+        return cursor.fetchall()
+
+# Usage
+monitor = NeonPerformanceMonitor(os.getenv('DATABASE_URL'))
+
+# Monitor query performance
+with monitor.timed_query("get_users"):
+    # Your query here
+    pass
+
+# Get slow queries
+slow_queries = monitor.get_slow_queries()
+for query in slow_queries:
+    print(f"Slow query: {query[0][:100]}...")
+```
+
+### 3. **Backup and Recovery**
+
+#### Automated Backups
+```python
+# Backup automation
+import subprocess
+import os
+from datetime import datetime
+
+class NeonBackupManager:
+    def __init__(self, connection_string: str, backup_dir: str):
+        self.connection_string = connection_string
+        self.backup_dir = backup_dir
+    
+    def create_backup(self):
+        """Create a backup using pg_dump"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = f"{self.backup_dir}/backup_{timestamp}.sql"
+        
+        cmd = [
+            "pg_dump",
+            "--dbname", self.connection_string,
+            "--verbose",
+            "--clean",
+            "--no-owner",
+            "--no-privileges",
+            "--file", backup_file
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"Backup created: {backup_file}")
+            return backup_file
+        else:
+            raise Exception(f"Backup failed: {result.stderr}")
+    
+    def restore_backup(self, backup_file: str):
+        """Restore from backup"""
+        cmd = [
+            "psql",
+            "--dbname", self.connection_string,
+            "--file", backup_file
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"Backup restored from: {backup_file}")
+        else:
+            raise Exception(f"Restore failed: {result.stderr}")
+
+# Usage
+backup_manager = NeonBackupManager(
+    os.getenv('DATABASE_URL'),
+    '/path/to/backups'
+)
+
+# Create backup
+backup_file = backup_manager.create_backup()
+
+# Restore if needed
+# backup_manager.restore_backup(backup_file)
+```
+
+#### Point-in-Time Recovery
+```python
+# Point-in-time recovery with Neon
+from neon_api import NeonAPI
+
+class NeonRecoveryManager:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_recovery_branch(self, timestamp: str):
+        """Create a branch from a specific point in time"""
+        branch_name = f"recovery-{timestamp.replace(':', '-')}"
+        
+        branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=branch_name,
+            parent_id="br-main-branch-id",
+            point_in_time=timestamp
+        )
+        
+        return {
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "connection_string": branch.connection_string,
+            "recovery_time": timestamp
+        }
+    
+    def promote_recovery_branch(self, branch_id: str):
+        """Promote recovery branch to main"""
+        promoted = self.neon.promote_branch(
+            project_id=self.project_id,
+            branch_id=branch_id
+        )
+        
+        return promoted
+
+# Usage
+recovery_manager = NeonRecoveryManager(neon, "ep-cool-darkness-123456")
+
+# Create recovery branch from specific time
+recovery_branch = recovery_manager.create_recovery_branch("2024-01-15T10:30:00Z")
+
+# Verify data in recovery branch
+# ... verification logic ...
+
+# Promote if recovery is successful
+# recovery_manager.promote_recovery_branch(recovery_branch["branch_id"])
+```
+
+### 4. **Monitoring and Alerting**
+
+#### Health Checks
+```python
+# Database health monitoring
+import psycopg2
+import time
+from typing import Dict, Any
+
+class NeonHealthMonitor:
+    def __init__(self, connection_string: str):
+        self.connection_string = connection_string
+    
+    def check_connection(self) -> Dict[str, Any]:
+        """Check database connection health"""
+        start_time = time.time()
+        
+        try:
+            conn = psycopg2.connect(self.connection_string)
+            cursor = conn.cursor()
+            
+            # Test basic connectivity
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            
+            # Test query performance
+            cursor.execute("SELECT version()")
+            version = cursor.fetchone()
+            
+            conn.close()
+            
+            duration = time.time() - start_time
+            
+            return {
+                "status": "healthy",
+                "response_time": duration,
+                "version": version[0] if version else "unknown"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+                "response_time": time.time() - start_time
+            }
+    
+    def check_database_stats(self) -> Dict[str, Any]:
+        """Get database statistics"""
+        try:
+            conn = psycopg2.connect(self.connection_string)
+            cursor = conn.cursor()
+            
+            # Get table sizes
+            cursor.execute("""
+                SELECT 
+                    schemaname,
+                    tablename,
+                    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
+                FROM pg_tables 
+                WHERE schemaname = 'public'
+                ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+            """)
+            
+            table_sizes = cursor.fetchall()
+            
+            # Get connection count
+            cursor.execute("SELECT count(*) FROM pg_stat_activity")
+            connection_count = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                "table_sizes": table_sizes,
+                "connection_count": connection_count
+            }
+            
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def run_health_check(self) -> Dict[str, Any]:
+        """Run comprehensive health check"""
+        connection_health = self.check_connection()
+        db_stats = self.check_database_stats()
+        
+        return {
+            "timestamp": time.time(),
+            "connection": connection_health,
+            "statistics": db_stats,
+            "overall_status": "healthy" if connection_health["status"] == "healthy" else "unhealthy"
+        }
+
+# Usage
+health_monitor = NeonHealthMonitor(os.getenv('DATABASE_URL'))
+
+# Run health check
+health_status = health_monitor.run_health_check()
+print(f"Database status: {health_status['overall_status']}")
+```
+
+#### Alerting Integration
+```python
+# Alerting system integration
+import requests
+import json
+from typing import Dict, Any
+
+class NeonAlerting:
+    def __init__(self, webhook_url: str = None):
+        self.webhook_url = webhook_url
+    
+    def send_alert(self, message: str, severity: str = "info", data: Dict[str, Any] = None):
+        """Send alert to monitoring system"""
+        alert = {
+            "message": message,
+            "severity": severity,
+            "timestamp": time.time(),
+            "data": data or {}
+        }
+        
+        if self.webhook_url:
+            try:
+                response = requests.post(
+                    self.webhook_url,
+                    json=alert,
+                    headers={"Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+            except Exception as e:
+                print(f"Failed to send alert: {e}")
+        
+        # Also log locally
+        print(f"[{severity.upper()}] {message}")
+    
+    def check_and_alert(self, health_status: Dict[str, Any]):
+        """Check health status and send alerts if needed"""
+        if health_status["overall_status"] == "unhealthy":
+            self.send_alert(
+                "Database is unhealthy",
+                "critical",
+                health_status
+            )
+        
+        # Check response time
+        response_time = health_status["connection"]["response_time"]
+        if response_time > 1.0:  # More than 1 second
+            self.send_alert(
+                f"Database response time is slow: {response_time:.3f}s",
+                "warning",
+                health_status
+            )
+        
+        # Check connection count
+        connection_count = health_status["statistics"].get("connection_count", 0)
+        if connection_count > 80:  # More than 80 connections
+            self.send_alert(
+                f"High connection count: {connection_count}",
+                "warning",
+                health_status
+            )
+
+# Usage
+alerting = NeonAlerting(os.getenv('ALERT_WEBHOOK_URL'))
+
+# Monitor and alert
+health_status = health_monitor.run_health_check()
+alerting.check_and_alert(health_status)
+```
+
+### 5. **Production Deployment Patterns**
+
+#### Blue-Green Deployment
+```python
+# Blue-green deployment with Neon
+class NeonBlueGreenDeployment:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_green_branch(self):
+        """Create green environment branch"""
+        green_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name="green-production",
+            parent_id="br-main-branch-id"
+        )
+        
+        return green_branch
+    
+    def deploy_to_green(self, green_branch_id: str):
+        """Deploy new version to green environment"""
+        # Get green branch connection
+        green_branch = self.neon.get_branch(
+            project_id=self.project_id,
+            branch_id=green_branch_id
+        )
+        
+        # Run migrations on green
+        self.run_migrations(green_branch.connection_string)
+        
+        # Run tests on green
+        self.run_tests(green_branch.connection_string)
+        
+        return green_branch
+    
+    def switch_to_green(self, green_branch_id: str):
+        """Switch production to green environment"""
+        # Promote green branch to main
+        promoted = self.neon.promote_branch(
+            project_id=self.project_id,
+            branch_id=green_branch_id
+        )
+        
+        return promoted
+    
+    def rollback_to_blue(self):
+        """Rollback to previous version (blue)"""
+        # This would require keeping track of the previous main branch
+        # or using Neon's time travel feature
+        pass
+
+# Usage
+blue_green = NeonBlueGreenDeployment(neon, "ep-cool-darkness-123456")
+
+# Create green environment
+green_branch = blue_green.create_green_branch()
+
+# Deploy to green
+blue_green.deploy_to_green(green_branch.id)
+
+# Test green environment
+# ... testing ...
+
+# Switch to green
+blue_green.switch_to_green(green_branch.id)
+```
+
+#### Canary Deployment
+```python
+# Canary deployment with Neon
+class NeonCanaryDeployment:
+    def __init__(self, neon_client: NeonAPI, project_id: str):
+        self.neon = neon_client
+        self.project_id = project_id
+    
+    def create_canary_branch(self, percentage: int):
+        """Create canary branch for percentage of traffic"""
+        canary_branch = self.neon.create_branch(
+            project_id=self.project_id,
+            branch_name=f"canary-{percentage}",
+            parent_id="br-main-branch-id"
+        )
+        
+        return canary_branch
+    
+    def route_traffic(self, user_id: str, canary_branch_id: str, percentage: int):
+        """Route traffic to canary based on user ID"""
+        # Simple hash-based routing
+        user_hash = hash(user_id) % 100
+        
+        if user_hash < percentage:
+            # Route to canary
+            canary_branch = self.neon.get_branch(
+                project_id=self.project_id,
+                branch_id=canary_branch_id
+            )
+            return canary_branch.connection_string
+        else:
+            # Route to main
+            main_branch = self.neon.get_branch(
+                project_id=self.project_id,
+                branch_id="br-main-branch-id"
+            )
+            return main_branch.connection_string
+    
+    def monitor_canary_metrics(self, canary_branch_id: str):
+        """Monitor canary deployment metrics"""
+        # Monitor error rates, response times, etc.
+        # Compare with main branch metrics
+        pass
+
+# Usage
+canary = NeonCanaryDeployment(neon, "ep-cool-darkness-123456")
+
+# Create canary for 10% of traffic
+canary_branch = canary.create_canary_branch(10)
+
+# Route traffic
+user_connection = canary.route_traffic("user123", canary_branch.id, 10)
+
+# Monitor canary
+canary.monitor_canary_metrics(canary_branch.id)
+```
+
+### 6. **Security Best Practices**
+
+#### Environment Variable Management
+```python
+# Secure environment variable handling
+import os
+from typing import Optional
+
+class SecureConfig:
+    def __init__(self):
+        self.database_url = self._get_required_env('DATABASE_URL')
+        self.api_key = self._get_required_env('NEON_API_KEY')
+        self.environment = self._get_env('NODE_ENV', 'development')
+    
+    def _get_required_env(self, key: str) -> str:
+        """Get required environment variable"""
+        value = os.getenv(key)
+        if not value:
+            raise ValueError(f"Required environment variable {key} not set")
+        return value
+    
+    def _get_env(self, key: str, default: str = None) -> Optional[str]:
+        """Get optional environment variable"""
+        return os.getenv(key, default)
+    
+    def get_database_config(self) -> dict:
+        """Get database configuration"""
+        return {
+            "url": self.database_url,
+            "ssl_mode": "require",
+            "application_name": f"my-app-{self.environment}"
+        }
+
+# Usage
+config = SecureConfig()
+db_config = config.get_database_config()
+```
+
+#### Audit Logging
+```python
+# Database audit logging
+import logging
+from datetime import datetime
+
+class NeonAuditLogger:
+    def __init__(self, log_file: str = "neon_audit.log"):
+        self.logger = logging.getLogger("neon_audit")
+        self.logger.setLevel(logging.INFO)
+        
+        handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+    
+    def log_database_operation(self, operation: str, user: str, details: dict):
+        """Log database operations"""
+        self.logger.info(
+            f"Database operation: {operation} by {user} - {details}"
+        )
+    
+    def log_connection_event(self, event: str, user: str, ip: str):
+        """Log connection events"""
+        self.logger.info(
+            f"Connection {event}: {user} from {ip}"
+        )
+
+# Usage
+audit_logger = NeonAuditLogger()
+
+# Log operations
+audit_logger.log_database_operation(
+    "SELECT",
+    "user@example.com",
+    {"table": "users", "rows_returned": 10}
+)
+
+audit_logger.log_connection_event(
+    "login",
+    "user@example.com",
+    "192.168.1.100"
+)
+```
+
+This comprehensive production deployment guide covers all aspects of deploying Neon Postgres in production, including security, performance, monitoring, backup/recovery, and deployment patterns.
+description: Complete production deployment guide for Neon Postgres with security, monitoring, and best practices
+globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.sql", "**/*.yaml", "**/*.yml", "**/*.json"]
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

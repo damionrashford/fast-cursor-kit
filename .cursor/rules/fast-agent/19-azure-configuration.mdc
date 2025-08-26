@@ -1,0 +1,581 @@
+---
+description: Azure OpenAI setup and configuration
+globs: ["**/*.py", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Azure Configuration
+
+**fast-agent** provides comprehensive support for Azure OpenAI services, including multiple authentication methods, regional deployment considerations, and advanced configuration options.
+
+## Overview
+
+Azure OpenAI integration supports:
+
+- **Multiple authentication methods** - API keys, managed identity, Azure CLI
+- **Regional deployments** - Support for different Azure regions
+- **Custom endpoints** - Sovereign clouds and custom deployments
+- **Advanced features** - Vision models, structured outputs, tool calling
+- **Security** - Enterprise-grade security and compliance
+
+## Basic Configuration
+
+### API Key Authentication
+
+The most common authentication method using Azure OpenAI API keys:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+```
+
+### Environment Variables
+
+Configure Azure OpenAI using environment variables:
+
+```bash
+export AZURE_OPENAI_API_KEY="your_azure_openai_key"
+export AZURE_OPENAI_RESOURCE_NAME="your-resource-name"
+export AZURE_OPENAI_DEPLOYMENT_NAME="deployment-name"
+export AZURE_OPENAI_API_VERSION="2023-05-15"
+```
+
+## Authentication Methods
+
+### 1. API Key with Resource Name
+
+Standard method using Azure resource name:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  # Do NOT include base_url when using resource_name
+```
+
+### 2. API Key with Custom Endpoint
+
+For custom endpoints or sovereign clouds:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  base_url: "https://your-endpoint.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  # Do NOT include resource_name when using base_url
+```
+
+### 3. DefaultAzureCredential
+
+For managed identity, Azure CLI, or other Azure authentication methods:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  use_default_azure_credential: true
+  base_url: "https://your-endpoint.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  # Do NOT include api_key or resource_name in this mode
+```
+
+**Note**: The `azure-identity` package must be installed for this method:
+```bash
+uv pip install azure-identity
+```
+
+## Model Configuration
+
+### Model String Format
+
+Azure models use the format: `azure.deployment-name`
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Azure App")
+
+@fast.agent(
+    "azure_agent",
+    "Azure OpenAI agent",
+    model="azure.gpt-4o-deployment"  # Uses your Azure deployment
+)
+async def main():
+    async with fast.run() as agent:
+        response = await agent.azure_agent.send("Hello from Azure!")
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Multiple Deployments
+
+Configure multiple Azure deployments:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "gpt-4o-deployment"
+  api_version: "2023-05-15"
+
+# Additional deployments can be configured as separate providers
+azure_gpt4:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "gpt-4-deployment"
+  api_version: "2023-05-15"
+
+azure_gpt35:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "gpt-35-turbo-deployment"
+  api_version: "2023-05-15"
+```
+
+## Regional Considerations
+
+### ⚠️ Important: Check Regional Availability
+
+Before deploying Azure OpenAI models, **always verify regional availability**:
+
+- **GPT-4o and GPT-4o-mini**: [Azure OpenAI Service models](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4o-and-gpt-4o-mini)
+- **GPT-4 Turbo with Vision**: [GPT-4 Turbo with Vision](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4-turbo-with-vision)
+- **GPT-4 Turbo**: [GPT-4 Turbo](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4-turbo)
+- **GPT-3.5 Turbo**: [GPT-3.5 Turbo](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-35-turbo)
+
+### Regional Configuration
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  # The resource_name determines the region
+  # Ensure your resource is in a region that supports your desired models
+```
+
+## Advanced Configuration
+
+### Sovereign Clouds
+
+For Azure Government, Azure China, or other sovereign clouds:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  base_url: "https://your-sovereign-cloud.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+```
+
+### Custom API Versions
+
+Specify different API versions for different features:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2024-02-15-preview"  # Use preview features
+```
+
+### Timeout and Retry Configuration
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  
+  # Connection settings
+  timeout: 60  # seconds
+  max_retries: 3
+  retry_delay: 1  # seconds
+```
+
+## Security Configuration
+
+### Managed Identity
+
+For production deployments using Azure managed identity:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  use_default_azure_credential: true
+  base_url: "https://your-endpoint.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+```
+
+### Service Principal
+
+Using Azure service principal:
+
+```bash
+# Set environment variables for service principal
+export AZURE_CLIENT_ID="your-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret"
+export AZURE_TENANT_ID="your-tenant-id"
+```
+
+```yaml
+# fastagent.config.yaml
+azure:
+  use_default_azure_credential: true
+  base_url: "https://your-endpoint.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+```
+
+### Network Security
+
+For VNet integration and private endpoints:
+
+```yaml
+# fastagent.config.yaml
+azure:
+  api_key: "your_azure_openai_key"
+  base_url: "https://your-private-endpoint.openai.azure.com/"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+  
+  # Network settings
+  verify_ssl: true
+  ca_bundle: "/path/to/ca-bundle.crt"  # If using custom CA
+```
+
+## Usage Examples
+
+### Basic Azure OpenAI Agent
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Azure Basic App")
+
+@fast.agent(
+    "azure_basic",
+    "Basic Azure OpenAI agent",
+    model="azure.gpt-4o-deployment"
+)
+async def main():
+    async with fast.run() as agent:
+        response = await agent.azure_basic.send("Hello from Azure OpenAI!")
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Multi-Model Azure Application
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Azure Multi-Model App")
+
+@fast.agent(
+    "gpt4o_agent",
+    "GPT-4o agent for complex tasks",
+    model="azure.gpt-4o-deployment"
+)
+@fast.agent(
+    "gpt35_agent",
+    "GPT-3.5 agent for simple tasks",
+    model="azure.gpt-35-turbo-deployment"
+)
+async def main():
+    async with fast.run() as agent:
+        # Use GPT-4o for complex analysis
+        complex_response = await agent.gpt4o_agent.send(
+            "Analyze the implications of quantum computing on cryptography"
+        )
+        
+        # Use GPT-3.5 for simple tasks
+        simple_response = await agent.gpt35_agent.send(
+            "Summarize this in one sentence: " + complex_response
+        )
+        
+        print(f"Complex analysis: {complex_response}")
+        print(f"Simple summary: {simple_response}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Vision Model with Azure
+
+```python
+import asyncio
+from pathlib import Path
+from mcp_agent.core.fastagent import FastAgent
+from mcp_agent.core.prompt import Prompt
+
+fast = FastAgent("Azure Vision App")
+
+@fast.agent(
+    "vision_agent",
+    "Azure OpenAI vision agent",
+    model="azure.gpt-4o-deployment"  # Ensure this deployment supports vision
+)
+async def main():
+    async with fast.run() as agent:
+        # Send image for analysis
+        response = await agent.vision_agent.send(
+            Prompt.user("Describe this image", Path("image.jpg"))
+        )
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Structured Outputs with Azure
+
+```python
+import asyncio
+from pydantic import BaseModel
+from typing import List
+from mcp_agent.core.fastagent import FastAgent
+
+class AnalysisResult(BaseModel):
+    summary: str
+    key_points: List[str]
+    confidence: float
+
+fast = FastAgent("Azure Structured App")
+
+@fast.agent(
+    "structured_agent",
+    "Azure OpenAI structured output agent",
+    model="azure.gpt-4o-deployment"
+)
+async def main():
+    async with fast.run() as agent:
+        result: AnalysisResult = await agent.structured_agent.structured(
+            "Analyze the impact of AI on healthcare",
+            AnalysisResult
+        )
+        
+        print(f"Summary: {result.summary}")
+        print(f"Key points: {result.key_points}")
+        print(f"Confidence: {result.confidence}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Workflow with Azure Models
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Azure Workflow App")
+
+@fast.agent(
+    "researcher",
+    "Research topics using Azure GPT-4o",
+    model="azure.gpt-4o-deployment"
+)
+@fast.agent(
+    "writer",
+    "Write content using Azure GPT-3.5",
+    model="azure.gpt-35-turbo-deployment"
+)
+@fast.chain(
+    "content_pipeline",
+    sequence=["researcher", "writer"]
+)
+async def main():
+    async with fast.run() as agent:
+        # Use the chain workflow with Azure models
+        result = await agent.content_pipeline.send(
+            "Create content about Azure OpenAI services"
+        )
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Model Not Available in Region
+
+**Error**: `Model not found` or `Deployment not found`
+
+**Solution**: Check regional availability and ensure your Azure resource is in a supported region.
+
+#### 2. Authentication Errors
+
+**Error**: `401 Unauthorized` or `403 Forbidden`
+
+**Solutions**:
+- Verify API key is correct
+- Check resource name and deployment name
+- Ensure proper permissions for managed identity
+- Verify service principal credentials
+
+#### 3. Network Connectivity
+
+**Error**: `Connection timeout` or `Network unreachable`
+
+**Solutions**:
+- Check VNet configuration for private endpoints
+- Verify firewall rules
+- Test connectivity to Azure OpenAI endpoint
+
+#### 4. API Version Issues
+
+**Error**: `API version not supported`
+
+**Solution**: Update to a supported API version in your configuration.
+
+### Debug Configuration
+
+Enable debug logging for Azure OpenAI:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "DEBUG"
+  azure:
+    enabled: true
+    show_requests: true
+    show_responses: true
+
+azure:
+  api_key: "your_azure_openai_key"
+  resource_name: "your-resource-name"
+  azure_deployment: "deployment-name"
+  api_version: "2023-05-15"
+```
+
+### Health Checks
+
+Test your Azure OpenAI configuration:
+
+```bash
+# Test configuration
+fast-agent check --provider azure
+
+# Test specific deployment
+fast-agent check --provider azure --model azure.gpt-4o-deployment
+
+# Show configuration
+fast-agent check show --provider azure
+```
+
+## Best Practices
+
+### Security
+
+1. **Use managed identity** for production deployments
+2. **Store secrets securely** in Azure Key Vault
+3. **Implement network security** with VNets and private endpoints
+4. **Monitor access** with Azure Monitor and Log Analytics
+
+### Performance
+
+1. **Choose appropriate regions** for latency optimization
+2. **Use appropriate model sizes** for cost optimization
+3. **Implement caching** for repeated queries
+4. **Monitor usage** with Azure Cost Management
+
+### Configuration Management
+
+1. **Use environment variables** for sensitive data
+2. **Version control** non-sensitive configuration
+3. **Use different configurations** for dev/staging/prod
+4. **Document deployment names** and their purposes
+
+### Monitoring
+
+1. **Set up Azure Monitor** for comprehensive monitoring
+2. **Configure alerts** for errors and high usage
+3. **Use Application Insights** for detailed tracing
+4. **Monitor costs** with Azure Cost Management
+
+## Production Deployment
+
+### Environment-Specific Configuration
+
+```yaml
+# fastagent.config.yaml
+default_model: "azure.gpt-4o-deployment"
+
+# Development
+azure:
+  api_key: "${DEV_AZURE_OPENAI_KEY}"
+  resource_name: "dev-openai-resource"
+  azure_deployment: "gpt-4o-deployment"
+  api_version: "2023-05-15"
+
+# Production (commented out - use secrets file)
+# azure:
+#   use_default_azure_credential: true
+#   base_url: "https://prod-openai-resource.openai.azure.com/"
+#   azure_deployment: "gpt-4o-deployment"
+#   api_version: "2023-05-15"
+```
+
+### Secrets Management
+
+```yaml
+# fastagent.secrets.yaml (not committed to version control)
+azure:
+  api_key: "sk-..."  # Production API key
+  resource_name: "prod-openai-resource"
+  azure_deployment: "gpt-4o-deployment"
+  api_version: "2023-05-15"
+```
+
+### Infrastructure as Code
+
+For Azure Resource Manager (ARM) templates:
+
+```json
+{
+  "type": "Microsoft.CognitiveServices/accounts",
+  "apiVersion": "2023-05-01",
+  "name": "your-openai-resource",
+  "location": "East US",
+  "sku": {
+    "name": "S0"
+  },
+  "kind": "OpenAI",
+  "properties": {
+    "customSubDomainName": "your-subdomain"
+  }
+}
+```
+
+---
+
+*Source: [https://fast-agent.ai/ref/azure_configuration/](https://fast-agent.ai/ref/azure_configuration/)*

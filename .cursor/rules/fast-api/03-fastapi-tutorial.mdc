@@ -1,0 +1,615 @@
+# FastAPI Tutorial - User Guide
+
+## First Steps
+
+### Installation
+```bash
+# Install FastAPI with all dependencies
+pip install "fastapi[standard]"
+
+# Install Uvicorn server
+pip install "uvicorn[standard]"
+```
+
+### Create Your First FastAPI App
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int, q: str | None = None):
+    return {"item_id": item_id, "q": q}
+```
+
+### Run Your Application
+```bash
+# Development server with auto-reload
+uvicorn main:app --reload
+
+# Production server
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+## Path Parameters
+
+### Basic Path Parameters
+```python
+@app.get("/items/{item_id}")
+def read_item(item_id: int):
+    return {"item_id": item_id}
+```
+
+### Path Parameters with Types
+```python
+@app.get("/users/{user_id}")
+def read_user(user_id: int):
+    return {"user_id": user_id}
+
+@app.get("/files/{file_path:path}")
+def read_file(file_path: str):
+    return {"file_path": file_path}
+```
+
+### Path Parameters with Validation
+```python
+from fastapi import Path
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int = Path(..., gt=0, le=1000)):
+    return {"item_id": item_id}
+```
+
+## Query Parameters
+
+### Basic Query Parameters
+```python
+@app.get("/items/")
+def read_items(skip: int = 0, limit: int = 100):
+    return {"skip": skip, "limit": limit}
+```
+
+### Optional Query Parameters
+```python
+@app.get("/items/")
+def read_items(skip: int = 0, limit: int | None = None):
+    return {"skip": skip, "limit": limit}
+```
+
+### Query Parameter Validation
+```python
+from fastapi import Query
+
+@app.get("/items/")
+def read_items(
+    q: str | None = Query(default=None, min_length=3, max_length=50),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, le=1000)
+):
+    return {"q": q, "skip": skip, "limit": limit}
+```
+
+### Multiple Query Parameters
+```python
+@app.get("/items/")
+def read_items(
+    skip: int = 0,
+    limit: int = 100,
+    q: str | None = None,
+    category: str | None = None
+):
+    return {
+        "skip": skip,
+        "limit": limit,
+        "q": q,
+        "category": category
+    }
+```
+
+## Request Body
+
+### Basic Request Body
+```python
+from pydantic import BaseModel
+
+class Item(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+
+@app.post("/items/")
+def create_item(item: Item):
+    return item
+```
+
+### Request Body with Validation
+```python
+from pydantic import BaseModel, Field
+
+class Item(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=1000)
+    price: float = Field(..., gt=0)
+    tax: float | None = Field(None, ge=0)
+
+@app.post("/items/")
+def create_item(item: Item):
+    return item
+```
+
+### Nested Models
+```python
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+
+class User(BaseModel):
+    name: str
+    email: str
+    address: Address
+    age: int
+
+@app.post("/users/")
+def create_user(user: User):
+    return user
+```
+
+## Response Models
+
+### Response Model Declaration
+```python
+class Item(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+
+class ItemResponse(BaseModel):
+    id: int
+    name: str
+    price: float
+    description: str | None = None
+
+@app.post("/items/", response_model=ItemResponse)
+def create_item(item: Item):
+    # FastAPI will automatically filter the response
+    return {
+        "id": 1,
+        "name": item.name,
+        "price": item.price,
+        "description": item.description
+    }
+```
+
+### Response Status Codes
+```python
+from fastapi import status
+
+@app.post("/items/", status_code=status.HTTP_201_CREATED)
+def create_item(item: Item):
+    return item
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int):
+    if item_id == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found"
+        )
+    return {"item_id": item_id}
+```
+
+## Form Data
+
+### Basic Form Data
+```python
+from fastapi import Form
+
+@app.post("/login/")
+def login(username: str = Form(), password: str = Form()):
+    return {"username": username}
+```
+
+### Form Data with Validation
+```python
+@app.post("/users/")
+def create_user(
+    name: str = Form(..., min_length=1, max_length=100),
+    age: int = Form(..., ge=0, le=120),
+    email: str = Form(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+):
+    return {"name": name, "age": age, "email": email}
+```
+
+## File Uploads
+
+### Basic File Upload
+```python
+from fastapi import File, UploadFile
+
+@app.post("/files/")
+def create_file(file: bytes = File()):
+    return {"file_size": len(file)}
+
+@app.post("/uploadfile/")
+def create_upload_file(file: UploadFile):
+    return {"filename": file.filename}
+```
+
+### Multiple Files
+```python
+@app.post("/files/")
+def create_files(files: list[bytes] = File()):
+    return {"file_sizes": [len(file) for file in files]}
+
+@app.post("/uploadfiles/")
+def create_upload_files(files: list[UploadFile]):
+    return {"filenames": [file.filename for file in files]}
+```
+
+### File Upload with Form Data
+```python
+@app.post("/files/")
+def create_file(
+    file: UploadFile,
+    description: str = Form()
+):
+    return {
+        "filename": file.filename,
+        "description": description
+    }
+```
+
+## Dependencies
+
+### Function Dependencies
+```python
+from fastapi import Depends
+
+def get_db():
+    db = DBSession()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/users/")
+def read_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return users
+```
+
+### Class Dependencies
+```python
+class Database:
+    def __init__(self):
+        self.connection = "database_connection"
+    
+    def get_data(self):
+        return {"data": "from database"}
+
+def get_database():
+    return Database()
+
+@app.get("/data/")
+def read_data(db: Database = Depends(get_database)):
+    return db.get_data()
+```
+
+### Dependency with Parameters
+```python
+def get_user_by_token(token: str = Depends(oauth2_scheme)):
+    user = fake_decode_token(token)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    return user
+
+@app.get("/users/me/")
+def read_users_me(current_user: User = Depends(get_user_by_token)):
+    return current_user
+```
+
+## Security
+
+### OAuth2 with Password Flow
+```python
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+@app.post("/token")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me/")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+```
+
+### HTTP Basic Auth
+```python
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+security = HTTPBasic()
+
+@app.get("/users/me/")
+def read_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    if not verify_credentials(credentials):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return {"username": credentials.username}
+```
+
+## Middleware
+
+### CORS Middleware
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### Custom Middleware
+```python
+from fastapi import Request
+import time
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+```
+
+## WebSockets
+
+### Basic WebSocket
+```python
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Message text was: {data}")
+    except WebSocketDisconnect:
+        print("Client disconnected")
+```
+
+### WebSocket with Connection Manager
+```python
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: int):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.send_personal_message(f"You wrote: {data}", websocket)
+            await manager.broadcast(f"Client #{client_id} says: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast(f"Client #{client_id} left the chat")
+```
+
+## Background Tasks
+
+### Simple Background Tasks
+```python
+from fastapi import BackgroundTasks
+
+def write_log(message: str):
+    with open("log.txt", "a") as f:
+        f.write(message)
+
+@app.post("/send-notification/{email}")
+def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_log, f"Notification sent to {email}")
+    return {"message": "Notification sent in the background"}
+```
+
+### Multiple Background Tasks
+```python
+def process_data(data: dict):
+    # Process data in background
+    pass
+
+def send_email(email: str, message: str):
+    # Send email in background
+    pass
+
+@app.post("/process/")
+def process_items(
+    items: list[Item],
+    background_tasks: BackgroundTasks
+):
+    for item in items:
+        background_tasks.add_task(process_data, item.dict())
+        background_tasks.add_task(send_email, "admin@example.com", f"Processed {item.name}")
+    return {"message": "Processing started"}
+```
+
+## Testing
+
+### TestClient
+```python
+from fastapi.testclient import TestClient
+
+client = TestClient(app)
+
+def test_read_main():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"Hello": "World"}
+
+def test_create_item():
+    response = client.post(
+        "/items/",
+        json={"name": "Test Item", "price": 10.5}
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Test Item"
+```
+
+### Async Testing
+```python
+import pytest
+from httpx import AsyncClient
+
+@pytest.mark.asyncio
+async def test_read_items():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.get("/items/")
+    assert response.status_code == 200
+```
+
+### Testing with Dependencies
+```python
+def override_get_db():
+    return FakeDatabase()
+
+app.dependency_overrides[get_db] = override_get_db
+
+client = TestClient(app)
+
+def test_read_users():
+    response = client.get("/users/")
+    assert response.status_code == 200
+    # Test with fake database
+```
+
+## Bigger Applications
+
+### Multiple Files Structure
+```
+app/
+├── __init__.py
+├── main.py
+├── dependencies.py
+├── models.py
+├── routers/
+│   ├── __init__.py
+│   ├── items.py
+│   └── users.py
+└── services/
+    ├── __init__.py
+    └── database.py
+```
+
+### Main Application
+```python
+# main.py
+from fastapi import FastAPI
+from app.routers import items, users
+
+app = FastAPI(title="My API", version="1.0.0")
+
+app.include_router(items.router, prefix="/items", tags=["items"])
+app.include_router(users.router, prefix="/users", tags=["users"])
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to My API"}
+```
+
+### Router Example
+```python
+# routers/items.py
+from fastapi import APIRouter, Depends, HTTPException
+from app.models import Item, ItemCreate
+from app.dependencies import get_db
+
+router = APIRouter()
+
+@router.get("/", response_model=list[Item])
+def read_items(skip: int = 0, limit: int = 100, db = Depends(get_db)):
+    items = db.query(Item).offset(skip).limit(limit).all()
+    return items
+
+@router.post("/", response_model=Item)
+def create_item(item: ItemCreate, db = Depends(get_db)):
+    db_item = Item(**item.dict())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+```
+
+### Models
+```python
+# models.py
+from pydantic import BaseModel
+from typing import Optional
+
+class ItemBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float
+
+class ItemCreate(ItemBase):
+    pass
+
+class Item(ItemBase):
+    id: int
+    
+    class Config:
+        from_attributes = True
+```
+
+This tutorial covers the essential FastAPI concepts and provides practical examples for building real-world applications.
+
+---
+
+*Source: [https://fastapi.tiangolo.com/learn/](https://fastapi.tiangolo.com/learn/)*
+description:
+globs:
+alwaysApply: false
+---

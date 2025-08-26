@@ -1,0 +1,121 @@
+---
+description: Fast-Agent framework overview, key features, and getting started guide
+globs: ["**/*.py", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Fast-Agent Homepage Documentation
+
+## Overview
+**fast-agent** is a comprehensive framework for creating and interacting with sophisticated Agents and Workflows in minutes. It's multi-modal - supporting Images and PDFs in Prompts, Resources and MCP Tool Call results.
+
+## Key Features
+
+### 1. Set up in 5 minutes
+- Install [fast-agent-mcp](https://pypi.org/project/fast-agent-mcp/) with [uv](https://docs.astral.sh/uv/) and get up and running in minutes
+- Quick installation and setup process
+
+### 2. Batteries Included
+- Out-of-the box examples of sophisticated Agents, Workflows and advanced MCP Usage
+- Prebuilt agents and examples implementing the patterns in Anthropic's [building effective agents](https://www.anthropic.com/engineering/building-effective-agents) paper
+- Get building valuable applications quickly
+
+### 3. New - Elicitation Quickstart Guide
+- Get started with MCP Elicitations for User Interaction
+- [Try now](https://fast-agent.ai/mcp/elicitations/)
+
+### 4. Comprehensive Test Suite
+- Comprehensive test automation, accelerating delivery and assuring quality
+
+### 5. MCP Feature Support
+- First MCP Host to support Tools, Prompts, Resources, Sampling and Roots
+- [Reference](https://fast-agent.ai/mcp/)
+
+### 6. Agent Developer Friendly
+- Lightweight deployment
+- In-built Echo and Playback LLMs allow robust agent application testing
+
+## Getting Started
+
+### Installation and Basic Commands
+```bash
+# Install fast-agent
+uv pip install fast-agent-mcp
+
+# Start an interactive session
+fast-agent go
+
+# Start with a remote MCP
+fast-agent go --url https://hf.co/mcp
+
+# Create Agent and Configuration files
+fast-agent setup
+
+# Run your first Agent
+uv run agent.py
+
+# Create Agent workflow examples
+fast-agent quickstart workflow
+```
+
+### Core Capabilities
+- **Multi-modal Support**: Images and PDFs in Prompts, Resources and MCP Tool Call results
+- **MCP Integration**: Seamlessly use MCP Servers with your agents, or host your agents as MCP Servers
+- **Pattern Implementation**: Prebuilt agents and examples implementing Anthropic's building effective agents patterns
+
+## Documentation Structure
+
+The fast-agent documentation is organized into several main sections:
+
+### Agents
+- **Defining Agents and Workflows**: How to create and configure agents
+- **Deploy and Run**: Deployment options and execution methods
+- **Prompting Agents**: How to interact with agents
+- **Instructions**: Setting up agent instructions and prompts
+
+### Models
+- **Model Features**: Understanding model capabilities
+- **LLM Providers**: Supported language model providers
+- **Internal Models**: Built-in models for testing and development
+
+### MCP (Model Context Protocol)
+- **Configuring Servers**: Setting up MCP servers
+- **Integration with MCP Types**: Working with MCP type system
+- **Quickstart - Elicitations**: User interaction features
+- **Quickstart - State Transfer**: Transferring state between agents
+- **Resources**: Additional MCP development resources
+
+### Reference
+- **fast-agent go**: Command-line interface reference
+- **Config File**: Configuration file format and options
+- **Command Line**: Command-line options and switches
+- **Class Reference**: Programmatic API reference
+- **Open Telemetry**: Observability and monitoring
+- **Azure Configuration**: Azure OpenAI setup and configuration
+
+## Quick Start Workflow
+
+1. **Install**: `uv pip install fast-agent-mcp`
+2. **Setup**: `fast-agent setup` (creates configuration files)
+3. **Create Agent**: Write your first agent with `@fast.agent()` decorator
+4. **Run**: `uv run agent.py` to start your agent
+5. **Deploy**: Use `--server` flag to deploy as MCP server
+
+## Key Benefits
+
+- **Rapid Development**: Get sophisticated agents running in minutes
+- **Multi-modal**: Support for text, images, and PDFs
+- **MCP Native**: Built for the Model Context Protocol ecosystem
+- **Production Ready**: Comprehensive testing and deployment options
+- **Developer Friendly**: Built-in testing models and debugging tools
+
+## Community and Resources
+
+- **PulseMCP**: Featured on PulseMCP - find thousands of MCP Servers for your Agents
+- **Documentation**: Comprehensive documentation at fast-agent.ai
+- **Examples**: Built-in examples and quickstart guides
+- **MCP Ecosystem**: Integration with the broader MCP community
+
+---
+
+*Source: [https://fast-agent.ai/](https://fast-agent.ai/)*

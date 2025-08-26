@@ -1,0 +1,566 @@
+# FastAPI Reference
+
+## FastAPI Class
+
+### Basic Usage
+```python
+from fastapi import FastAPI
+
+app = FastAPI(
+    title="My API",
+    description="A comprehensive API",
+    version="1.0.0",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+```
+
+### FastAPI Parameters
+```python
+app = FastAPI(
+    title="My API",                    # API title
+    description="API description",     # API description
+    version="1.0.0",                   # API version
+    openapi_url="/openapi.json",       # OpenAPI schema URL
+    docs_url="/docs",                  # Swagger UI URL
+    redoc_url="/redoc",                # ReDoc URL
+    debug=True,                        # Debug mode
+    openapi_tags=[                     # Custom tags
+        {
+            "name": "users",
+            "description": "User operations"
+        }
+    ]
+)
+```
+
+## Request Parameters
+
+### Path Parameters
+```python
+from fastapi import Path
+
+@app.get("/items/{item_id}")
+def read_item(
+    item_id: int = Path(..., description="The ID of the item to get"),
+    q: str | None = Path(None, alias="item-query")
+):
+    return {"item_id": item_id, "q": q}
+
+# Path parameter validation
+@app.get("/items/{item_id}")
+def read_item(
+    item_id: int = Path(..., gt=0, le=1000, description="Item ID between 1 and 1000")
+):
+    return {"item_id": item_id}
+```
+
+### Query Parameters
+```python
+from fastapi import Query
+
+@app.get("/items/")
+def read_items(
+    q: str | None = Query(
+        default=None,
+        min_length=3,
+        max_length=50,
+        description="Query string for filtering items"
+    ),
+    skip: int = Query(default=0, ge=0, description="Number of items to skip"),
+    limit: int = Query(default=100, le=1000, description="Maximum number of items to return")
+):
+    return {"q": q, "skip": skip, "limit": limit}
+
+# Multiple query parameters
+@app.get("/items/")
+def read_items(
+    q: list[str] = Query(default=[], description="Multiple query parameters")
+):
+    return {"q": q}
+```
+
+### Header Parameters
+```python
+from fastapi import Header
+
+@app.get("/items/")
+def read_items(
+    user_agent: str | None = Header(default=None),
+    x_token: str | None = Header(default=None, alias="X-Token")
+):
+    return {"User-Agent": user_agent, "X-Token": x_token}
+```
+
+### Cookie Parameters
+```python
+from fastapi import Cookie
+
+@app.get("/items/")
+def read_items(
+    session_id: str | None = Cookie(default=None),
+    user_id: str | None = Cookie(default=None)
+):
+    return {"session_id": session_id, "user_id": user_id}
+```
+
+## Status Codes
+
+### HTTP Status Codes
+```python
+from fastapi import status
+
+@app.post("/items/", status_code=status.HTTP_201_CREATED)
+def create_item(item: Item):
+    return item
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int):
+    if item_id == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found"
+        )
+    return {"item_id": item_id}
+```
+
+### Common Status Codes
+```python
+# Success responses
+status.HTTP_200_OK              # 200
+status.HTTP_201_CREATED         # 201
+status.HTTP_202_ACCEPTED        # 202
+status.HTTP_204_NO_CONTENT      # 204
+
+# Client errors
+status.HTTP_400_BAD_REQUEST     # 400
+status.HTTP_401_UNAUTHORIZED    # 401
+status.HTTP_403_FORBIDDEN       # 403
+status.HTTP_404_NOT_FOUND       # 404
+status.HTTP_422_UNPROCESSABLE_ENTITY  # 422
+
+# Server errors
+status.HTTP_500_INTERNAL_SERVER_ERROR  # 500
+status.HTTP_502_BAD_GATEWAY     # 502
+status.HTTP_503_SERVICE_UNAVAILABLE    # 503
+```
+
+## UploadFile Class
+
+### Basic File Upload
+```python
+from fastapi import UploadFile
+
+@app.post("/uploadfile/")
+def create_upload_file(file: UploadFile):
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": file.size
+    }
+```
+
+### File Validation
+```python
+@app.post("/uploadfile/")
+def create_upload_file(
+    file: UploadFile = File(..., max_length=1000000)  # 1MB limit
+):
+    return {"filename": file.filename}
+
+# Multiple files with validation
+@app.post("/uploadfiles/")
+def create_upload_files(
+    files: list[UploadFile] = File(..., max_length=1000000)
+):
+    return {"filenames": [file.filename for file in files]}
+```
+
+### File Processing
+```python
+import shutil
+from pathlib import Path
+
+@app.post("/uploadfile/")
+def create_upload_file(file: UploadFile):
+    # Save file to disk
+    with open(f"uploads/{file.filename}", "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return {"filename": file.filename, "saved": True}
+```
+
+## Exceptions
+
+### HTTPException
+```python
+from fastapi import HTTPException, status
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int):
+    if item_id == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+            headers={"X-Error": "Item not found"}
+        )
+    return {"item_id": item_id}
+```
+
+### WebSocketException
+```python
+from fastapi import WebSocket, WebSocketException
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "quit":
+                raise WebSocketException(code=1000, reason="User requested disconnect")
+            await websocket.send_text(f"Message: {data}")
+    except WebSocketException as e:
+        print(f"WebSocket error: {e}")
+```
+
+## Dependencies
+
+### Depends Function
+```python
+from fastapi import Depends
+
+def get_db():
+    db = DBSession()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/users/")
+def read_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return users
+```
+
+### Security Dependencies
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    # Validate token logic here
+    return user
+
+@app.get("/users/me/")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+```
+
+## APIRouter Class
+
+### Basic Router
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/")
+def read_items():
+    return {"items": []}
+
+@router.post("/")
+def create_item(item: Item):
+    return item
+```
+
+### Router with Prefix and Tags
+```python
+router = APIRouter(
+    prefix="/items",
+    tags=["items"],
+    responses={404: {"description": "Not found"}},
+)
+
+@router.get("/")
+def read_items():
+    return {"items": []}
+
+# Include router in main app
+app.include_router(router)
+```
+
+### Router Dependencies
+```python
+router = APIRouter(dependencies=[Depends(verify_token)])
+
+@router.get("/")
+def read_items():
+    return {"items": []}
+```
+
+## Background Tasks
+
+### BackgroundTasks Class
+```python
+from fastapi import BackgroundTasks
+
+def write_log(message: str):
+    with open("log.txt", "a") as f:
+        f.write(message)
+
+@app.post("/send-notification/{email}")
+def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_log, f"Notification sent to {email}")
+    return {"message": "Notification sent in the background"}
+```
+
+### Multiple Background Tasks
+```python
+def process_data(data: dict):
+    # Process data
+    pass
+
+def send_email(email: str, message: str):
+    # Send email
+    pass
+
+@app.post("/process/")
+def process_items(
+    items: list[Item],
+    background_tasks: BackgroundTasks
+):
+    for item in items:
+        background_tasks.add_task(process_data, item.dict())
+        background_tasks.add_task(send_email, "admin@example.com", f"Processed {item.name}")
+    return {"message": "Processing started"}
+```
+
+## Request Class
+
+### Request Object
+```python
+from fastapi import Request
+
+@app.get("/request-info/")
+def read_request_info(request: Request):
+    return {
+        "url": request.url,
+        "method": request.method,
+        "headers": dict(request.headers),
+        "client": request.client.host if request.client else None,
+        "query_params": dict(request.query_params),
+        "path_params": dict(request.path_params)
+    }
+```
+
+### Request Body Access
+```python
+@app.post("/raw-body/")
+async def read_raw_body(request: Request):
+    body = await request.body()
+    return {"body_size": len(body)}
+```
+
+## Response Class
+
+### Custom Response
+```python
+from fastapi import Response
+from fastapi.responses import JSONResponse, HTMLResponse
+
+@app.get("/custom-response/")
+def read_custom_response():
+    return Response(
+        content="Custom response content",
+        media_type="text/plain",
+        headers={"X-Custom": "Header"}
+    )
+
+@app.get("/json-response/")
+def read_json_response():
+    return JSONResponse(
+        content={"message": "Custom JSON"},
+        status_code=201,
+        headers={"X-Custom": "Header"}
+    )
+
+@app.get("/html-response/")
+def read_html_response():
+    return HTMLResponse(
+        content="<h1>Hello World</h1>",
+        status_code=200
+    )
+```
+
+### Streaming Response
+```python
+from fastapi.responses import StreamingResponse
+
+def generate_data():
+    for i in range(10):
+        yield f"data: {i}\n"
+
+@app.get("/stream/")
+def read_stream():
+    return StreamingResponse(
+        generate_data(),
+        media_type="text/plain"
+    )
+```
+
+## Middleware
+
+### CORS Middleware
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### Custom Middleware
+```python
+from fastapi import Request
+import time
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+```
+
+## WebSockets
+
+### WebSocket Class
+```python
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Message: {data}")
+    except WebSocketDisconnect:
+        print("Client disconnected")
+```
+
+### WebSocket with Path Parameters
+```python
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: int):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Client {client_id}: {data}")
+    except WebSocketDisconnect:
+        print(f"Client {client_id} disconnected")
+```
+
+## TestClient
+
+### Basic Testing
+```python
+from fastapi.testclient import TestClient
+
+client = TestClient(app)
+
+def test_read_main():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"Hello": "World"}
+
+def test_create_item():
+    response = client.post(
+        "/items/",
+        json={"name": "Test Item", "price": 10.5}
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Test Item"
+```
+
+### Testing with Headers
+```python
+def test_read_users_with_auth():
+    response = client.get(
+        "/users/",
+        headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 200
+```
+
+### Testing File Uploads
+```python
+def test_upload_file():
+    with open("test_file.txt", "rb") as f:
+        response = client.post(
+            "/uploadfile/",
+            files={"file": ("test_file.txt", f, "text/plain")}
+        )
+    assert response.status_code == 200
+    assert response.json()["filename"] == "test_file.txt"
+```
+
+## Security
+
+### OAuth2PasswordBearer
+```python
+from fastapi.security import OAuth2PasswordBearer
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+@app.get("/users/me/")
+def read_users_me(token: str = Depends(oauth2_scheme)):
+    return {"token": token}
+```
+
+### HTTPBasic
+```python
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+security = HTTPBasic()
+
+@app.get("/users/me/")
+def read_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    return {"username": credentials.username}
+```
+
+### HTTPBearer
+```python
+from fastapi.security import HTTPBearer
+
+security = HTTPBearer()
+
+@app.get("/users/me/")
+def read_current_user(credentials = Depends(security)):
+    return {"token": credentials.credentials}
+```
+
+This reference covers the essential FastAPI classes, functions, and components for building comprehensive APIs.
+
+---
+
+*Source: [https://fastapi.tiangolo.com/reference/](https://fastapi.tiangolo.com/reference/)*
+description:
+globs:
+alwaysApply: false
+---

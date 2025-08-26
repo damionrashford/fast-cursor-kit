@@ -1,0 +1,499 @@
+---
+description: Command-line options and switches reference
+globs: ["**/*.py", "**/*.sh", "**/*.bash"]
+alwaysApply: true
+---
+
+# Command Line Options
+
+**fast-agent** offers flexible command line options for both running agent applications and using built-in CLI utilities.
+
+## Agent Applications
+
+When running a **fast-agent** application (typically `uv run agent.py`), you have access to the following command line options:
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| --model MODEL | Override the default model for the agent | --model gpt-4o |
+| --agent AGENT | Specify which agent to use (default: "default") | --agent researcher |
+| -m, --message MESSAGE | Send a single message to the agent and exit | --message "Hello world" |
+| -p, --prompt-file FILE | Load and apply a prompt file | --prompt-file conversation.txt |
+| --quiet | Disable progress display, tool and message logging | --quiet |
+| --version | Show version and exit | --version |
+| --server | Run as an MCP server | --server |
+| --transport {http,sse,stdio} | Transport protocol when running as server | --transport http |
+| --port PORT | Port for SSE server (default: 8000) | --port 8080 |
+| --host HOST | Host for SSE server (default: 0.0.0.0) | --host localhost |
+
+### Examples
+
+```bash
+# Run interactively with specified model
+uv run agent.py --model sonnet
+
+# Run specific agent
+uv run agent.py --agent researcher
+
+# Run with specific agent and model
+uv run agent.py --agent researcher --model gpt-4o
+
+# Send a message to an agent and exit
+uv run agent.py --agent summarizer --message "Summarize this document"
+
+# Apply a prompt file
+uv run agent.py --prompt-file my_conversation.txt
+
+# Run as an SSE server on port 8080
+uv run agent.py --server --transport sse --port 8080
+
+# Run as a stdio server
+uv run agent.py --server --transport stdio
+
+# Get minimal output (for scripting)
+uv run agent.py --quiet --message "Generate a report"
+```
+
+### Programmatic Control of Command Line Parsing
+
+When embedding FastAgent in other applications (like web frameworks or GUI applications), you can disable command line parsing by setting `parse_cli_args=False` in the constructor:
+
+```python
+# Create FastAgent without parsing command line arguments
+fast = FastAgent("Embedded Agent", parse_cli_args=False)
+```
+
+This is particularly useful when:
+
+- Integrating with frameworks like FastAPI/Uvicorn that have their own argument parsing
+- Building GUI applications where command line arguments aren't relevant
+- Creating applications with custom argument parsing requirements
+
+## fast-agent go Command
+
+The `fast-agent go` command lets you run an interactive agent directly without creating a Python file. Read the guide [here](https://fast-agent.ai/ref/go_command/)
+
+### Basic Usage
+
+```bash
+# Basic interactive mode
+fast-agent go --model=haiku
+
+# With servers from config
+fast-agent go --servers=fetch,filesystem --model=haiku
+
+# Direct URL connection
+fast-agent go --url=http://localhost:8001/mcp,http://api.example.com/sse
+
+# Non-interactive mode
+fast-agent go --message="What is the weather today?" --model=haiku
+```
+
+### Advanced Options
+
+```bash
+# Multiple models (parallel workflow)
+fast-agent go --model=sonnet,haiku,gpt-4o
+
+# Custom instruction file
+fast-agent go --instruction=./my-prompt.md --model=haiku
+
+# With authentication
+fast-agent go --url=https://api.example.com/mcp --auth=YOUR_API_TOKEN
+
+# Quiet mode for automation
+fast-agent go --message="Process data" --model=haiku --quiet
+```
+
+## fast-agent check Command
+
+Use `fast-agent check` to diagnose your configuration:
+
+```bash
+# Show configuration summary
+fast-agent check
+
+# Display configuration file
+fast-agent check show
+
+# Display secrets file
+fast-agent check show --secrets
+
+# Test specific providers
+fast-agent check --provider openai
+fast-agent check --provider anthropic
+
+# Test MCP servers
+fast-agent check --servers
+fast-agent check --server brave_search
+```
+
+### Check Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| --provider PROVIDER | Test specific provider | --provider openai |
+| --servers | Test all configured servers | --servers |
+| --server SERVER | Test specific server | --server brave_search |
+| --secrets | Show secrets configuration | --secrets |
+| --verbose | Show detailed information | --verbose |
+
+## fast-agent setup Command
+
+Create a new agent project with configuration files:
+
+```bash
+# Set up in current directory
+fast-agent setup
+
+# Set up in a specific directory
+fast-agent setup --config-dir ./my-agent
+
+# Force overwrite existing files
+fast-agent setup --force
+```
+
+### Setup Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| --config-dir DIR | Directory to create configuration in | --config-dir ./my-agent |
+| --force | Overwrite existing files | --force |
+| --template TEMPLATE | Use specific template | --template basic |
+
+## fast-agent quickstart Command
+
+Create example applications to get started quickly:
+
+```bash
+# Show available examples
+fast-agent quickstart
+
+# Create workflow examples
+fast-agent quickstart workflow
+
+# Create researcher example
+fast-agent quickstart researcher
+
+# Create elicitations example
+fast-agent quickstart elicitations
+
+# Create state transfer example
+fast-agent quickstart state-transfer
+```
+
+### Quickstart Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| --template TEMPLATE | Specific template to use | --template workflow |
+| --output-dir DIR | Output directory | --output-dir ./examples |
+| --force | Overwrite existing files | --force |
+
+## fast-agent prompt-server Command
+
+Start a prompt server for managing MCP prompts:
+
+```bash
+# Start prompt server
+fast-agent prompt-server
+
+# Start on specific port
+fast-agent prompt-server --port 8080
+
+# Start with custom host
+fast-agent prompt-server --host 0.0.0.0 --port 9000
+```
+
+### Prompt Server Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| --port PORT | Port to run server on (default: 8000) | --port 8080 |
+| --host HOST | Host to bind to (default: 0.0.0.0) | --host localhost |
+| --config CONFIG | Configuration file path | --config ./prompt-config.yaml |
+
+## Environment Variables
+
+### Provider API Keys
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="your_openai_key"
+
+# Anthropic
+export ANTHROPIC_API_KEY="your_anthropic_key"
+
+# Azure OpenAI
+export AZURE_OPENAI_API_KEY="your_azure_key"
+export AZURE_OPENAI_RESOURCE_NAME="your-resource-name"
+export AZURE_OPENAI_DEPLOYMENT_NAME="deployment-name"
+
+# DeepSeek
+export DEEPSEEK_API_KEY="your_deepseek_key"
+
+# Generic
+export GENERIC_API_KEY="your_generic_key"
+export GENERIC_BASE_URL="https://your-api.com/v1"
+
+# OpenRouter
+export OPENROUTER_API_KEY="your_openrouter_key"
+
+# TensorZero
+export TENSORZERO_API_KEY="your_tensorzero_key"
+
+# Ollama
+export OLLAMA_BASE_URL="http://localhost:11434"
+```
+
+### General Configuration
+
+```bash
+# Default model
+export FAST_AGENT__DEFAULT_MODEL="haiku"
+
+# Logging
+export FAST_AGENT__LOGGING__LEVEL="INFO"
+export FAST_AGENT__LOGGING__FORMAT="detailed"
+
+# Telemetry
+export FAST_AGENT__OTEL__ENABLED="true"
+export FAST_AGENT__OTEL__OTLP_ENDPOINT="http://localhost:4318/v1/traces"
+
+# Performance
+export FAST_AGENT__PERFORMANCE__MAX_CONCURRENT_REQUESTS="10"
+export FAST_AGENT__PERFORMANCE__REQUEST_TIMEOUT="30"
+```
+
+## Advanced Usage Examples
+
+### Development Workflow
+
+```bash
+# 1. Set up a new project
+fast-agent setup --config-dir ./my-agent
+
+# 2. Check configuration
+cd my-agent
+fast-agent check
+
+# 3. Test with interactive mode
+fast-agent go --model=haiku
+
+# 4. Run your agent
+uv run agent.py --model=haiku
+```
+
+### Production Deployment
+
+```bash
+# 1. Validate configuration
+fast-agent check --provider openai --provider anthropic
+
+# 2. Test MCP servers
+fast-agent check --servers
+
+# 3. Run as server
+uv run agent.py --server --transport http --port 8080
+
+# 4. Monitor with telemetry
+FAST_AGENT__OTEL__ENABLED=true uv run agent.py --server
+```
+
+### Automation and Scripting
+
+```bash
+#!/bin/bash
+# analyze.sh
+
+# Check configuration first
+if ! fast-agent check --quiet; then
+    echo "Configuration error"
+    exit 1
+fi
+
+# Run analysis
+RESULT=$(fast-agent go --message="Analyze: $1" --model=haiku --quiet)
+echo "Analysis: $RESULT"
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Test Fast Agent
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv pip install fast-agent-mcp
+      
+      - name: Check configuration
+        run: fast-agent check
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      
+      - name: Run tests
+        run: |
+          fast-agent go --message="Run test suite" --model=haiku --quiet
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Docker Integration
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+# Install uv
+RUN pip install uv
+
+# Install fast-agent
+RUN uv pip install fast-agent-mcp
+
+# Copy configuration
+COPY fastagent.config.yaml /app/
+COPY fastagent.secrets.yaml /app/
+
+WORKDIR /app
+
+# Expose port for server mode
+EXPOSE 8000
+
+# Default command
+CMD ["fast-agent", "go", "--model=haiku"]
+```
+
+```bash
+# Build and run
+docker build -t my-fast-agent .
+docker run -p 8000:8000 -e OPENAI_API_KEY=$OPENAI_API_KEY my-fast-agent
+```
+
+## Error Handling and Debugging
+
+### Common Error Scenarios
+
+```bash
+# API key not found
+fast-agent go --model=openai.gpt-4o
+# Error: OpenAI API key not found. Set OPENAI_API_KEY environment variable.
+
+# Server not found
+fast-agent go --servers=nonexistent_server
+# Error: Server 'nonexistent_server' not found in configuration.
+
+# Invalid model
+fast-agent go --model=invalid_model
+# Error: Model 'invalid_model' not found or not supported.
+
+# Configuration file not found
+fast-agent check --config=missing.yaml
+# Error: Configuration file 'missing.yaml' not found.
+```
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+FAST_AGENT_DEBUG=1 fast-agent go --model=haiku
+
+# Verbose output
+fast-agent check --verbose
+
+# Debug specific components
+FAST_AGENT__LOGGING__LEVEL=DEBUG fast-agent go --model=haiku
+```
+
+### Troubleshooting Commands
+
+```bash
+# Check all providers
+fast-agent check --provider all
+
+# Test specific server
+fast-agent check --server brave_search --verbose
+
+# Validate configuration file
+fast-agent check show --validate
+
+# Show environment variables
+fast-agent check show --env
+```
+
+## Best Practices
+
+### Security
+
+```bash
+# Use environment variables for secrets
+export API_KEY="your-secret-key"
+fast-agent go --url=https://api.example.com/mcp --auth=$API_KEY
+
+# Don't hardcode secrets
+# ❌ Bad: fast-agent go --auth=your-secret-key
+# ✅ Good: fast-agent go --auth=$API_KEY
+```
+
+### Performance
+
+```bash
+# Use quiet mode for automation
+fast-agent go --message="Process data" --model=haiku --quiet
+
+# Limit server connections
+fast-agent go --servers=filesystem --model=haiku
+
+# Use appropriate models for tasks
+fast-agent go --model=haiku --message="Simple task"
+fast-agent go --model=gpt-4o --message="Complex analysis"
+```
+
+### Organization
+
+```bash
+# Use descriptive names
+fast-agent go --name="Data Analysis Agent" --model=haiku
+
+# Use configuration files for complex setups
+fast-agent go --config-path=./analysis-config.yaml
+
+# Group related commands in scripts
+#!/bin/bash
+# deploy.sh
+fast-agent check
+fast-agent go --message="Deploy application" --model=haiku --quiet
+```
+
+### Automation
+
+```bash
+# Create reusable scripts
+#!/bin/bash
+# analyze.sh
+fast-agent go --message="Analyze: $1" --model=haiku --quiet
+
+# Use in automation
+./analyze.sh "sales data for Q1"
+
+# Batch processing
+for file in data/*.txt; do
+    fast-agent go --message="Process $file" --model=haiku --quiet
+done
+```
+
+---
+
+*Source: [https://fast-agent.ai/ref/cmd_switches/](https://fast-agent.ai/ref/cmd_switches/)*

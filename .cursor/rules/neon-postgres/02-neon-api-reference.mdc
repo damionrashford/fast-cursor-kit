@@ -1,0 +1,561 @@
+# Neon API Reference and SDK Guide
+
+## API Overview
+
+The Neon API provides programmatic access to manage projects, branches, databases, and compute resources. The API is RESTful and supports JSON request/response formats.
+
+## Authentication
+
+### API Key Authentication
+
+All API requests require authentication using an API key:
+
+```python
+# Python SDK
+from neon_api import NeonAPI
+
+neon = NeonAPI(api_key="your_api_key_here")
+
+# Direct HTTP requests
+import requests
+
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json"
+}
+```
+
+### Getting Your API Key
+
+1. **Dashboard Method**:
+   ```bash
+   # 1. Log into Neon Console
+   # 2. Go to Settings > API Keys
+   # 3. Click "Create API Key"
+   # 4. Copy the generated key
+   ```
+
+2. **CLI Method**:
+   ```bash
+   # Install Neon CLI
+   npm install -g @neondatabase/cli
+   
+   # Login and get API key
+   neon auth login
+   neon api-key create
+   ```
+
+## Core API Endpoints
+
+### 1. **Projects Management**
+
+#### Create Project
+```python
+from neon_api import NeonAPI
+
+neon = NeonAPI(api_key="your_api_key")
+
+# Basic project creation
+project = neon.create_project(
+    name="my-application",
+    region="us-east-2"
+)
+
+print(f"Project ID: {project.id}")
+print(f"Connection String: {project.connection_string}")
+```
+
+#### List Projects
+```python
+# Get all projects
+projects = neon.list_projects()
+
+for project in projects:
+    print(f"Project: {project.name}")
+    print(f"  ID: {project.id}")
+    print(f"  Region: {project.region}")
+    print(f"  Status: {project.status}")
+```
+
+#### Get Project Details
+```python
+# Get specific project
+project = neon.get_project(project_id="ep-cool-darkness-123456")
+
+print(f"Name: {project.name}")
+print(f"Region: {project.region}")
+print(f"Created: {project.created_at}")
+print(f"Updated: {project.updated_at}")
+```
+
+#### Update Project
+```python
+# Update project settings
+updated_project = neon.update_project(
+    project_id="ep-cool-darkness-123456",
+    name="updated-app-name",
+    settings={
+        "autoscaling": True,
+        "compute_provisioner": "k8s-neonvm"
+    }
+)
+```
+
+#### Delete Project
+```python
+# Delete project (irreversible)
+neon.delete_project(project_id="ep-cool-darkness-123456")
+```
+
+### 2. **Branch Management**
+
+#### Create Branch
+```python
+# Create branch from main
+branch = neon.create_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_name="feature/user-authentication",
+    parent_id="br-main-branch-id"
+)
+
+print(f"Branch ID: {branch.id}")
+print(f"Host: {branch.host}")
+print(f"Connection String: {branch.connection_string}")
+```
+
+#### List Branches
+```python
+# Get all branches for a project
+branches = neon.list_branches(project_id="ep-cool-darkness-123456")
+
+for branch in branches:
+    print(f"Branch: {branch.name}")
+    print(f"  ID: {branch.id}")
+    print(f"  Parent: {branch.parent_id}")
+    print(f"  Created: {branch.created_at}")
+```
+
+#### Get Branch Details
+```python
+# Get specific branch
+branch = neon.get_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-feature-branch-id"
+)
+
+print(f"Name: {branch.name}")
+print(f"Host: {branch.host}")
+print(f"Parent: {branch.parent_id}")
+```
+
+#### Delete Branch
+```python
+# Delete branch
+neon.delete_branch(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-feature-branch-id"
+)
+```
+
+### 3. **Database Management**
+
+#### Create Database
+```python
+# Create database in a branch
+database = neon.create_database(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id",
+    name="my_database"
+)
+
+print(f"Database: {database.name}")
+print(f"Owner: {database.owner}")
+```
+
+#### List Databases
+```python
+# Get all databases in a branch
+databases = neon.list_databases(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id"
+)
+
+for db in databases:
+    print(f"Database: {db.name}")
+    print(f"  Owner: {db.owner}")
+    print(f"  Created: {db.created_at}")
+```
+
+#### Delete Database
+```python
+# Delete database
+neon.delete_database(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id",
+    name="my_database"
+)
+```
+
+### 4. **Compute Management**
+
+#### Get Compute Endpoints
+```python
+# Get compute endpoints for a branch
+endpoints = neon.list_endpoints(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id"
+)
+
+for endpoint in endpoints:
+    print(f"Endpoint: {endpoint.id}")
+    print(f"  Host: {endpoint.host}")
+    print(f"  Port: {endpoint.port}")
+    print(f"  Type: {endpoint.type}")
+```
+
+#### Create Compute Endpoint
+```python
+# Create new compute endpoint
+endpoint = neon.create_endpoint(
+    project_id="ep-cool-darkness-123456",
+    branch_id="br-main-branch-id",
+    type="read_write"
+)
+
+print(f"Endpoint ID: {endpoint.id}")
+print(f"Host: {endpoint.host}")
+```
+
+## SDK Usage Examples
+
+### 1. **Python SDK**
+
+#### Installation
+```bash
+pip install neon-api
+```
+
+#### Basic Usage
+```python
+from neon_api import NeonAPI
+import asyncio
+
+# Synchronous usage
+neon = NeonAPI(api_key="your_api_key")
+
+# Create project
+project = neon.create_project(
+    name="my-app",
+    region="us-east-2"
+)
+
+# Create branch
+branch = neon.create_branch(
+    project_id=project.id,
+    branch_name="development"
+)
+
+# Get connection string
+connection_string = branch.connection_string
+print(f"Connect to: {connection_string}")
+```
+
+#### Async Usage
+```python
+import asyncio
+from neon_api import NeonAPI
+
+async def main():
+    neon = NeonAPI(api_key="your_api_key")
+    
+    # Async project creation
+    project = await neon.create_project(
+        name="async-app",
+        region="us-east-2"
+    )
+    
+    # Async branch creation
+    branch = await neon.create_branch(
+        project_id=project.id,
+        branch_name="async-dev"
+    )
+    
+    return branch.connection_string
+
+# Run async function
+connection_string = asyncio.run(main())
+```
+
+### 2. **JavaScript/TypeScript SDK**
+
+#### Installation
+```bash
+npm install @neondatabase/sdk
+```
+
+#### Basic Usage
+```typescript
+import { NeonAPI } from '@neondatabase/sdk';
+
+const neon = new NeonAPI({ apiKey: 'your_api_key' });
+
+// Create project
+const project = await neon.createProject({
+  name: 'my-app',
+  region: 'us-east-2'
+});
+
+// Create branch
+const branch = await neon.createBranch({
+  projectId: project.id,
+  branchName: 'development'
+});
+
+console.log(`Connection string: ${branch.connectionString}`);
+```
+
+### 3. **REST API Direct Usage**
+
+#### HTTP Client Examples
+```python
+import requests
+import json
+
+class NeonRESTClient:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://console.neon.tech/api/v2"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+    
+    def create_project(self, name: str, region: str):
+        """Create a new project via REST API"""
+        url = f"{self.base_url}/projects"
+        data = {
+            "project": {
+                "name": name,
+                "region_id": region
+            }
+        }
+        
+        response = requests.post(url, headers=self.headers, json=data)
+        response.raise_for_status()
+        
+        return response.json()
+    
+    def list_projects(self):
+        """List all projects via REST API"""
+        url = f"{self.base_url}/projects"
+        
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        
+        return response.json()
+    
+    def create_branch(self, project_id: str, branch_name: str, parent_id: str = None):
+        """Create a new branch via REST API"""
+        url = f"{self.base_url}/projects/{project_id}/branches"
+        data = {
+            "branch": {
+                "name": branch_name
+            }
+        }
+        
+        if parent_id:
+            data["branch"]["parent_id"] = parent_id
+        
+        response = requests.post(url, headers=self.headers, json=data)
+        response.raise_for_status()
+        
+        return response.json()
+
+# Usage
+client = NeonRESTClient(api_key="your_api_key")
+
+# Create project
+project = client.create_project("my-app", "us-east-2")
+print(f"Created project: {project['project']['id']}")
+
+# List projects
+projects = client.list_projects()
+for p in projects['projects']:
+    print(f"Project: {p['name']} ({p['id']})")
+```
+
+## Rate Limiting
+
+### Rate Limit Headers
+```python
+import requests
+
+response = requests.get("https://console.neon.tech/api/v2/projects", 
+                       headers={"Authorization": f"Bearer {api_key}"})
+
+# Check rate limit headers
+print(f"Rate Limit: {response.headers.get('X-RateLimit-Limit')}")
+print(f"Remaining: {response.headers.get('X-RateLimit-Remaining')}")
+print(f"Reset Time: {response.headers.get('X-RateLimit-Reset')}")
+```
+
+### Handling Rate Limits
+```python
+import time
+import requests
+from requests.exceptions import HTTPError
+
+def make_api_request(url: str, headers: dict, max_retries: int = 3):
+    """Make API request with rate limit handling"""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        
+        except HTTPError as e:
+            if e.response.status_code == 429:  # Rate limited
+                retry_after = int(e.response.headers.get('Retry-After', 60))
+                print(f"Rate limited. Waiting {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            else:
+                raise e
+    
+    raise Exception("Max retries exceeded")
+```
+
+## Error Handling
+
+### Common Error Codes
+```python
+class NeonAPIError(Exception):
+    def __init__(self, message: str, status_code: int = None, error_code: str = None):
+        self.message = message
+        self.status_code = status_code
+        self.error_code = error_code
+        super().__init__(self.message)
+
+def handle_neon_error(response):
+    """Handle Neon API errors"""
+    if response.status_code >= 400:
+        error_data = response.json()
+        
+        if response.status_code == 400:
+            raise NeonAPIError("Bad Request", 400, error_data.get('code'))
+        elif response.status_code == 401:
+            raise NeonAPIError("Unauthorized - Check your API key", 401)
+        elif response.status_code == 403:
+            raise NeonAPIError("Forbidden - Insufficient permissions", 403)
+        elif response.status_code == 404:
+            raise NeonAPIError("Resource not found", 404)
+        elif response.status_code == 429:
+            raise NeonAPIError("Rate limit exceeded", 429)
+        elif response.status_code >= 500:
+            raise NeonAPIError("Server error", response.status_code)
+        else:
+            raise NeonAPIError(f"API Error: {error_data.get('message', 'Unknown error')}")
+```
+
+### Retry Logic
+```python
+import time
+from functools import wraps
+
+def retry_on_error(max_retries: int = 3, delay: float = 1.0):
+    """Decorator for retrying API calls on errors"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        time.sleep(delay * (2 ** attempt))  # Exponential backoff
+                        continue
+                    else:
+                        break
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
+# Usage
+@retry_on_error(max_retries=3, delay=1.0)
+def create_project_with_retry(name: str, region: str):
+    return neon.create_project(name=name, region=region)
+```
+
+## Pagination
+
+### Handling Paginated Responses
+```python
+def get_all_projects(neon_client):
+    """Get all projects using pagination"""
+    all_projects = []
+    cursor = None
+    
+    while True:
+        params = {"limit": 100}
+        if cursor:
+            params["cursor"] = cursor
+        
+        response = neon_client.list_projects(**params)
+        projects = response.get('projects', [])
+        all_projects.extend(projects)
+        
+        # Check if there are more pages
+        if not response.get('pagination', {}).get('next_cursor'):
+            break
+        
+        cursor = response['pagination']['next_cursor']
+    
+    return all_projects
+```
+
+## Webhooks
+
+### Setting Up Webhooks
+```python
+# Create webhook endpoint
+webhook = neon.create_webhook(
+    project_id="ep-cool-darkness-123456",
+    events=["project.created", "branch.created", "database.created"],
+    url="https://your-app.com/webhooks/neon"
+)
+
+print(f"Webhook ID: {webhook.id}")
+print(f"Events: {webhook.events}")
+```
+
+### Webhook Payload Example
+```python
+# Example webhook payload for project.created
+{
+    "event": "project.created",
+    "data": {
+        "project": {
+            "id": "ep-cool-darkness-123456",
+            "name": "my-app",
+            "region_id": "aws-us-east-2",
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-15T10:30:00Z"
+        }
+    },
+    "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+This comprehensive API reference covers all major Neon API endpoints, authentication methods, SDK usage, error handling, and advanced features like webhooks and pagination.
+description: Complete Neon API reference with authentication, endpoints, SDK usage, and error handling
+globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.sql", "**/*.yaml", "**/*.yml", "**/*.json"]
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

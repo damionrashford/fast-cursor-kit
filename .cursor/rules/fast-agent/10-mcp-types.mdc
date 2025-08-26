@@ -1,0 +1,328 @@
+---
+description: Integration with MCP SDK type system and message handling
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# Integration with MCP Types
+
+## MCP Type Compatibility
+
+FastAgent is built to seamlessly integrate with the MCP SDK type system:
+
+Conversations with assistants are based on `PromptMessageMultipart` - an extension the the mcp `PromptMessage` type, with support for multiple content sections. This type is expected to become native in a future version of MCP: https://github.com/modelcontextprotocol/specification/pull/198
+
+## Message History Transfer
+
+FastAgent makes it easy to transfer conversation history between agents:
+
+```python
+@fast.agent(name="haiku", model="haiku")
+@fast.agent(name="openai", model="o3-mini.medium")
+
+async def main() -> None:
+    async with fast.run() as agent:
+        # Start an interactive session with "haiku"
+        await agent.prompt(agent_name="haiku")
+        
+        # Transfer the message history to "openai" (using PromptMessageMultipart)
+        await agent.openai.generate(agent.haiku.message_history)
+        
+        # Continue the conversation
+        await agent.prompt(agent_name="openai")
+```
+
+## Core MCP Types
+
+### PromptMessageMultipart
+
+The primary message type used by FastAgent for conversations:
+
+```python
+from mcp_agent.mcp.prompt_message_multipart import PromptMessageMultipart
+from mcp.types import TextContent, ImageContent, Resource
+
+# Create a multipart message
+message = PromptMessageMultipart(
+    role="user",
+    content=[
+        TextContent(type="text", text="Analyze this image"),
+        ImageContent(type="image", mimeType="image/png", data=base64_encoded_image)
+    ]
+)
+```
+
+### Content Types
+
+FastAgent supports all MCP content types:
+
+#### TextContent
+```python
+from mcp.types import TextContent
+
+text_content = TextContent(
+    type="text",
+    text="Hello, how are you?"
+)
+```
+
+#### ImageContent
+```python
+from mcp.types import ImageContent
+import base64
+
+# Encode image as base64
+with open("image.png", "rb") as f:
+    image_data = base64.b64encode(f.read()).decode()
+
+image_content = ImageContent(
+    type="image",
+    mimeType="image/png",
+    data=image_data
+)
+```
+
+#### Resource
+```python
+from mcp.types import Resource
+
+resource = Resource(
+    uri="file:///path/to/document.pdf",
+    mimeType="application/pdf"
+)
+```
+
+#### EmbeddedResource
+```python
+from mcp.types import EmbeddedResource
+import base64
+
+# Embed a file directly in the message
+with open("document.pdf", "rb") as f:
+    file_data = base64.b64encode(f.read()).decode()
+
+embedded_resource = EmbeddedResource(
+    type="resource",
+    mimeType="application/pdf",
+    data=file_data
+)
+```
+
+## Working with MCP Types
+
+### Creating Messages
+
+```python
+from mcp_agent.core.prompt import Prompt
+from mcp.types import TextContent, ImageContent
+
+# Simple text message
+text_message = Prompt.user("Hello, world!")
+
+# Message with image
+image_message = Prompt.user(
+    "Describe this image",
+    Path("photo.jpg")  # Automatically converted to ImageContent
+)
+
+# Complex multipart message
+complex_message = Prompt.user(
+    TextContent(type="text", text="Analyze this data"),
+    ImageContent(type="image", mimeType="image/png", data=chart_data),
+    Resource(uri="file:///data.json", mimeType="application/json")
+)
+```
+
+### Processing Responses
+
+```python
+from mcp_agent.mcp.prompt_message_multipart import PromptMessageMultipart
+
+# Send message and get multipart response
+response: PromptMessageMultipart = await agent.generate([Prompt.user("Analyze this image", Path("chart.png"))])
+
+# Extract different content types
+for content in response.content:
+    if content.type == "text":
+        print(f"Text response: {content.text}")
+    elif content.type == "image":
+        print(f"Image content: {content.mimeType}")
+    elif content.type == "resource":
+        print(f"Resource: {content.resource.uri}")
+```
+
+### Response Methods
+
+The `PromptMessageMultipart` class provides convenient methods for extracting content:
+
+```python
+response = await agent.generate([Prompt.user("Generate a report")])
+
+# Get the main text response (without tool calls)
+main_text = response.last_text()
+
+# Get the first text content
+first_text = response.first_text()
+
+# Get all text content (including tool calls)
+all_text = response.all_text()
+
+# Access raw content
+for content in response.content:
+    print(f"Content type: {content.type}")
+```
+
+## Tool Calls and Results
+
+### Tool Call Types
+
+```python
+from mcp.types import ToolCall, ToolResult
+
+# Tool call in a message
+tool_call = ToolCall(
+    name="search_web",
+    arguments={"query": "Python programming"},
+    callId="call_123"
+)
+
+# Tool result
+tool_result = ToolResult(
+    callId="call_123",
+    content=[
+        TextContent(type="text", text="Search results for Python programming...")
+    ]
+)
+```
+
+### Processing Tool Calls
+
+```python
+response = await agent.generate([Prompt.user("Search for information about AI")])
+
+# Extract tool calls
+for content in response.content:
+    if hasattr(content, 'toolCalls'):
+        for tool_call in content.toolCalls:
+            print(f"Tool called: {tool_call.name}")
+            print(f"Arguments: {tool_call.arguments}")
+            print(f"Call ID: {tool_call.callId}")
+    
+    if hasattr(content, 'toolResults'):
+        for tool_result in content.toolResults:
+            print(f"Tool result for call {tool_result.callId}:")
+            for result_content in tool_result.content:
+                if result_content.type == "text":
+                    print(f"  {result_content.text}")
+```
+
+## Advanced Type Usage
+
+### Custom Content Types
+
+You can create custom content types for specialized use cases:
+
+```python
+from mcp.types import TextContent
+from typing import Dict, Any
+
+class CustomContent(TextContent):
+    def __init__(self, text: str, metadata: Dict[str, Any]):
+        super().__init__(type="text", text=text)
+        self.metadata = metadata
+
+# Use custom content
+custom_content = CustomContent(
+    text="Special analysis",
+    metadata={"confidence": 0.95, "source": "custom_analyzer"}
+)
+
+message = PromptMessageMultipart(
+    role="user",
+    content=[custom_content]
+)
+```
+
+### Type Validation
+
+FastAgent includes type validation for MCP types:
+
+```python
+from mcp_agent.core.validation import validate_mcp_content
+
+# Validate content before sending
+content = TextContent(type="text", text="Hello")
+is_valid = validate_mcp_content(content)
+
+if is_valid:
+    response = await agent.send(Prompt.user(content))
+else:
+    print("Invalid content type")
+```
+
+### Type Conversion
+
+Automatic conversion between different content types:
+
+```python
+from mcp_agent.core.conversion import convert_to_mcp_content
+
+# Convert various inputs to MCP content
+text_content = convert_to_mcp_content("Hello world")
+image_content = convert_to_mcp_content(Path("image.jpg"))
+resource_content = convert_to_mcp_content("file:///data.json")
+
+# All can be used in messages
+message = Prompt.user(text_content, image_content, resource_content)
+```
+
+## Error Handling
+
+### Type Errors
+
+```python
+try:
+    response = await agent.generate([Prompt.user("Test message")])
+except MCPTypeError as e:
+    print(f"Type error: {e.message}")
+    print(f"Expected type: {e.expected_type}")
+    print(f"Received type: {e.received_type}")
+```
+
+### Content Validation Errors
+
+```python
+try:
+    # Invalid content type
+    invalid_content = TextContent(type="invalid", text="test")
+    response = await agent.send(Prompt.user(invalid_content))
+except ContentValidationError as e:
+    print(f"Content validation failed: {e.details}")
+```
+
+## Best Practices
+
+### Type Safety
+
+1. **Use type hints** - Always specify types for better IDE support
+2. **Validate content** - Check content before sending to agents
+3. **Handle errors** - Implement proper error handling for type mismatches
+4. **Use appropriate types** - Choose the right content type for your data
+
+### Performance
+
+1. **Minimize conversions** - Avoid unnecessary type conversions
+2. **Batch operations** - Process multiple content items together
+3. **Cache content** - Reuse content objects when possible
+4. **Optimize size** - Compress large content when appropriate
+
+### Compatibility
+
+1. **Follow MCP spec** - Ensure compliance with MCP specification
+2. **Test with different servers** - Verify compatibility across MCP servers
+3. **Handle version differences** - Account for MCP version variations
+4. **Document custom types** - Clearly document any custom content types
+
+---
+
+*Source: [https://fast-agent.ai/mcp/types/](https://fast-agent.ai/mcp/types/)*

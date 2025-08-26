@@ -1,0 +1,732 @@
+# Neon Framework Integrations and ORM Guide
+
+## Framework Integrations
+
+### 1. **Python Frameworks**
+
+#### FastAPI Integration
+```python
+# main.py
+from fastapi import FastAPI, Depends
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from datetime import datetime
+import os
+
+app = FastAPI()
+
+# Neon connection string
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require")
+
+# SQLAlchemy setup
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Model definition
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    email = Column(String, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# API endpoints
+@app.post("/users/")
+def create_user(name: str, email: str, db: Session = Depends(get_db)):
+    user = User(name=name, email=email)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@app.get("/users/")
+def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = db.query(User).offset(skip).limit(limit).all()
+    return users
+```
+
+#### Django Integration
+```python
+# settings.py
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Neon database configuration
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'dbname',
+        'USER': 'user',
+        'PASSWORD': 'pass',
+        'HOST': 'ep-cool-darkness-123456.us-east-2.aws.neon.tech',
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
+    }
+}
+
+# models.py
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+
+class User(AbstractUser):
+    bio = models.TextField(max_length=500, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'users'
+
+class Post(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'posts'
+        ordering = ['-created_at']
+
+# views.py
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from .models import Post, User
+
+def post_list(request):
+    posts = Post.objects.select_related('author').all()
+    return render(request, 'blog/post_list.html', {'posts': posts})
+
+def post_detail(request, pk):
+    post = get_object_or_404(Post, pk=pk)
+    return render(request, 'blog/post_detail.html', {'post': post})
+```
+
+#### Flask Integration
+```python
+# app.py
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+import os
+
+app = Flask(__name__)
+
+# Neon configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL',
+    'postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+# Models
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+# Routes
+@app.route('/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    user = User(username=data['username'], email=data['email'])
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'id': user.id, 'username': user.username}), 201
+
+@app.route('/users', methods=['GET'])
+def get_users():
+    users = User.query.all()
+    return jsonify([{'id': user.id, 'username': user.username} for user in users])
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+### 2. **JavaScript/TypeScript Frameworks**
+
+#### Next.js Integration
+```typescript
+// lib/db.ts
+import { Pool } from 'pg'
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+})
+
+export default pool
+
+// pages/api/users.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+import pool from '../../lib/db'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'GET') {
+    try {
+      const result = await pool.query('SELECT * FROM users')
+      res.status(200).json(result.rows)
+    } catch (error) {
+      res.status(500).json({ error: 'Database error' })
+    }
+  } else if (req.method === 'POST') {
+    try {
+      const { name, email } = req.body
+      const result = await pool.query(
+        'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *',
+        [name, email]
+      )
+      res.status(201).json(result.rows[0])
+    } catch (error) {
+      res.status(500).json({ error: 'Database error' })
+    }
+  }
+}
+
+// pages/users.tsx
+import { useEffect, useState } from 'react'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+export default function Users() {
+  const [users, setUsers] = useState<User[]>([])
+
+  useEffect(() => {
+    fetch('/api/users')
+      .then(res => res.json())
+      .then(data => setUsers(data))
+  }, [])
+
+  return (
+    <div>
+      <h1>Users</h1>
+      <ul>
+        {users.map(user => (
+          <li key={user.id}>{user.name} ({user.email})</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+#### React Integration
+```typescript
+// src/services/api.ts
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001'
+
+export interface User {
+  id: number
+  name: string
+  email: string
+  created_at: string
+}
+
+export const userApi = {
+  async getUsers(): Promise<User[]> {
+    const response = await fetch(`${API_BASE_URL}/users`)
+    if (!response.ok) throw new Error('Failed to fetch users')
+    return response.json()
+  },
+
+  async createUser(userData: Omit<User, 'id' | 'created_at'>): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    })
+    if (!response.ok) throw new Error('Failed to create user')
+    return response.json()
+  }
+}
+
+// src/components/UserList.tsx
+import React, { useState, useEffect } from 'react'
+import { userApi, User } from '../services/api'
+
+export function UserList() {
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true)
+      const data = await userApi.getUsers()
+      setUsers(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div>Loading users...</div>
+  if (error) return <div>Error: {error}</div>
+
+  return (
+    <div>
+      <h2>Users</h2>
+      <ul>
+        {users.map(user => (
+          <li key={user.id}>
+            {user.name} - {user.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+#### Remix Integration
+```typescript
+// app/db.server.ts
+import { Pool } from 'pg'
+
+let pool: Pool
+
+declare global {
+  var __db__: Pool
+}
+
+if (process.env.NODE_ENV === 'production') {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  })
+} else {
+  if (!global.__db__) {
+    global.__db__ = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    })
+  }
+  pool = global.__db__
+}
+
+export { pool }
+
+// app/routes/users.tsx
+import type { LoaderFunction, ActionFunction } from '@remix-run/node'
+import { json } from '@remix-run/node'
+import { useLoaderData, Form } from '@remix-run/react'
+import { pool } from '~/db.server'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+export const loader: LoaderFunction = async () => {
+  const result = await pool.query('SELECT * FROM users ORDER BY created_at DESC')
+  return json({ users: result.rows })
+}
+
+export const action: ActionFunction = async ({ request }) => {
+  const formData = await request.formData()
+  const name = formData.get('name') as string
+  const email = formData.get('email') as string
+
+  await pool.query(
+    'INSERT INTO users (name, email) VALUES ($1, $2)',
+    [name, email]
+  )
+
+  return json({ success: true })
+}
+
+export default function Users() {
+  const { users } = useLoaderData<{ users: User[] }>()
+
+  return (
+    <div>
+      <h1>Users</h1>
+      
+      <Form method="post">
+        <input name="name" placeholder="Name" required />
+        <input name="email" type="email" placeholder="Email" required />
+        <button type="submit">Add User</button>
+      </Form>
+
+      <ul>
+        {users.map(user => (
+          <li key={user.id}>
+            {user.name} - {user.email}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+### 3. **ORM Integrations**
+
+#### SQLAlchemy (Python)
+```python
+# models.py
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from datetime import datetime
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    full_name = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Post(Base):
+    __tablename__ = "posts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    content = Column(Text)
+    author_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    author = relationship("User", back_populates="posts")
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+# Usage
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def create_user(db: Session, username: str, email: str, full_name: str):
+    user = User(username=username, email=email, full_name=full_name)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+def get_users(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(User).offset(skip).limit(limit).all()
+```
+
+#### Prisma (TypeScript/JavaScript)
+```typescript
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  posts     Post[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// lib/prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+let prisma: PrismaClient
+
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient()
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient()
+  }
+  prisma = global.prisma
+}
+
+export default prisma
+
+// pages/api/users.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+import prisma from '../../lib/prisma'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'GET') {
+    try {
+      const users = await prisma.user.findMany({
+        include: { posts: true }
+      })
+      res.status(200).json(users)
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch users' })
+    }
+  } else if (req.method === 'POST') {
+    try {
+      const { email, name } = req.body
+      const user = await prisma.user.create({
+        data: { email, name }
+      })
+      res.status(201).json(user)
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create user' })
+    }
+  }
+}
+```
+
+#### Drizzle ORM (TypeScript)
+```typescript
+// db/schema.ts
+import { pgTable, serial, varchar, timestamp, text, boolean } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
+
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+})
+
+export const posts = pgTable('posts', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  content: text('content'),
+  published: boolean('published').default(false),
+  authorId: serial('author_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+})
+
+export const usersRelations = relations(users, ({ many }) => ({
+  posts: many(posts)
+}))
+
+export const postsRelations = relations(posts, ({ one }) => ({
+  author: one(users, {
+    fields: [posts.authorId],
+    references: [users.id]
+  })
+}))
+
+// db/index.ts
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
+import * as schema from './schema'
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
+
+export const db = drizzle(pool, { schema })
+
+// Usage
+import { db } from './db'
+import { users, posts } from './db/schema'
+import { eq } from 'drizzle-orm'
+
+// Create user
+const newUser = await db.insert(users).values({
+  email: 'user@example.com',
+  name: 'John Doe'
+}).returning()
+
+// Get users with posts
+const usersWithPosts = await db.query.users.findMany({
+  with: { posts: true }
+})
+
+// Get user by email
+const user = await db.query.users.findFirst({
+  where: eq(users.email, 'user@example.com'),
+  with: { posts: true }
+})
+```
+
+### 4. **Connection Pooling**
+
+#### PgBouncer Integration
+```python
+# neon_pool.py
+import psycopg2
+from psycopg2 import pool
+import os
+
+class NeonConnectionPool:
+    def __init__(self):
+        self.connection_pool = psycopg2.pool.SimpleConnectionPool(
+            1,  # min connections
+            20, # max connections
+            os.getenv('DATABASE_URL'),
+            options='-c search_path=public'
+        )
+    
+    def get_connection(self):
+        return self.connection_pool.getconn()
+    
+    def return_connection(self, conn):
+        self.connection_pool.putconn(conn)
+    
+    def close_all(self):
+        self.connection_pool.closeall()
+
+# Usage
+pool = NeonConnectionPool()
+
+def execute_query(query, params=None):
+    conn = pool.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        result = cursor.fetchall()
+        conn.commit()
+        return result
+    finally:
+        pool.return_connection(conn)
+```
+
+#### Connection String Optimization
+```python
+# Optimized connection string for Neon
+DATABASE_URL = (
+    "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname"
+    "?sslmode=require"
+    "&connect_timeout=10"
+    "&application_name=my_app"
+    "&options=-c%20search_path%3Dpublic"
+)
+
+# Environment-specific configurations
+import os
+
+def get_database_url():
+    base_url = os.getenv('DATABASE_URL')
+    if os.getenv('NODE_ENV') == 'production':
+        return f"{base_url}&pool_timeout=30&max_connections=20"
+    else:
+        return f"{base_url}&pool_timeout=10&max_connections=5"
+```
+
+### 5. **Environment Configuration**
+
+#### Docker Configuration
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require
+      - NODE_ENV=production
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+```
+
+#### Environment Variables
+```bash
+# .env.local
+DATABASE_URL=postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require
+NODE_ENV=development
+LOG_LEVEL=debug
+
+# .env.production
+DATABASE_URL=postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require
+NODE_ENV=production
+LOG_LEVEL=info
+```
+
+This comprehensive framework integration guide covers all major frameworks, ORMs, and connection patterns for working with Neon Postgres.
+description: Complete framework integrations, ORM guides, and connection patterns for Neon Postgres
+globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.sql", "**/*.yaml", "**/*.yml", "**/*.json"]
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

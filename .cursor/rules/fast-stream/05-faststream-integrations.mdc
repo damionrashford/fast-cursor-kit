@@ -1,0 +1,850 @@
+# FastStream Integrations and Ecosystem
+
+FastStream integrates seamlessly with various frameworks, tools, and monitoring systems. This guide covers integrations with web frameworks, databases, monitoring tools, and development utilities.
+
+## Web Framework Integrations
+
+### FastAPI Integration
+
+FastStream integrates natively with FastAPI for building comprehensive microservices:
+
+```python
+from fastapi import FastAPI, HTTPException
+from faststream import FastStream
+from faststream.asgi import FastStreamRouter
+from pydantic import BaseModel
+
+# Create FastAPI app
+api_app = FastAPI(title="User Service API")
+
+# Create FastStream app
+stream_app = FastStream("user-stream-service")
+
+# Create router for FastStream
+stream_router = FastStreamRouter(stream_app)
+
+# Include FastStream in FastAPI
+api_app.include_router(stream_router, prefix="/stream")
+
+# FastAPI models
+class UserCreate(BaseModel):
+    name: str
+    email: str
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    status: str
+
+# FastAPI endpoints
+@api_app.post("/users", response_model=UserResponse)
+async def create_user(user: UserCreate):
+    # Publish to FastStream
+    await stream_app.publish("user-created", user.dict())
+    return UserResponse(
+        id=1,
+        name=user.name,
+        email=user.email,
+        status="created"
+    )
+
+@api_app.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(user_id: int):
+    # Request user data via FastStream
+    response = await stream_app.request("user-request", {"user_id": user_id})
+    return UserResponse(**response)
+
+# FastStream handlers
+@stream_app.subscribe("user-created")
+async def handle_user_created(message: dict):
+    # Process user creation
+    print(f"User created: {message}")
+    return {"status": "processed"}
+
+@stream_app.subscribe("user-request")
+async def handle_user_request(message: dict):
+    # Return user data
+    user_id = message["user_id"]
+    return {
+        "id": user_id,
+        "name": f"User {user_id}",
+        "email": f"user{user_id}@example.com",
+        "status": "active"
+    }
+
+# Run both applications
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(api_app, host="0.0.0.0", port=8000)
+```
+
+### Django Integration
+
+Integrate FastStream with Django for event-driven Django applications:
+
+```python
+# django_faststream.py
+from django.apps import AppConfig
+from django.conf import settings
+from faststream import FastStream
+import asyncio
+import threading
+
+class FastStreamConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'faststream_integration'
+
+class DjangoFastStream:
+    def __init__(self):
+        self.app = FastStream("django-stream-service")
+        self.loop = None
+        self.thread = None
+    
+    def start(self):
+        """Start FastStream in a separate thread"""
+        def run_faststream():
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self.app.run())
+        
+        self.thread = threading.Thread(target=run_faststream, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        """Stop FastStream"""
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        if self.thread:
+            self.thread.join()
+
+# Django FastStream instance
+django_faststream = DjangoFastStream()
+
+# Django signals integration
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import User
+
+@receiver(post_save, sender=User)
+def user_saved(sender, instance, created, **kwargs):
+    """Send user events to FastStream when Django models are saved"""
+    if created:
+        # Publish user created event
+        asyncio.create_task(
+            django_faststream.app.publish("user-created", {
+                "id": instance.id,
+                "name": instance.name,
+                "email": instance.email
+            })
+        )
+    else:
+        # Publish user updated event
+        asyncio.create_task(
+            django_faststream.app.publish("user-updated", {
+                "id": instance.id,
+                "name": instance.name,
+                "email": instance.email
+            })
+        )
+
+# FastStream handlers
+@django_faststream.app.subscribe("user-created")
+async def handle_django_user_created(message: dict):
+    # Process Django user creation
+    print(f"Django user created: {message}")
+    return {"status": "processed"}
+
+@django_faststream.app.subscribe("user-updated")
+async def handle_django_user_updated(message: dict):
+    # Process Django user update
+    print(f"Django user updated: {message}")
+    return {"status": "processed"}
+```
+
+### Flask Integration
+
+Integrate FastStream with Flask applications:
+
+```python
+from flask import Flask, request, jsonify
+from faststream import FastStream
+import asyncio
+import threading
+
+# Create Flask app
+flask_app = Flask(__name__)
+
+# Create FastStream app
+stream_app = FastStream("flask-stream-service")
+
+class FlaskFastStream:
+    def __init__(self, stream_app):
+        self.app = stream_app
+        self.loop = None
+        self.thread = None
+    
+    def start(self):
+        """Start FastStream in background"""
+        def run_faststream():
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self.app.run())
+        
+        self.thread = threading.Thread(target=run_faststream, daemon=True)
+        self.thread.start()
+    
+    async def publish(self, topic: str, message: dict):
+        """Publish message to FastStream"""
+        if self.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                self.app.publish(topic, message),
+                self.loop
+            )
+            return future.result()
+
+# Flask FastStream instance
+flask_faststream = FlaskFastStream(stream_app)
+
+# Flask routes
+@flask_app.route("/users", methods=["POST"])
+def create_user():
+    user_data = request.json
+    
+    # Publish to FastStream
+    asyncio.create_task(
+        flask_faststream.publish("user-created", user_data)
+    )
+    
+    return jsonify({"status": "user_created", "user": user_data})
+
+@flask_app.route("/users/<int:user_id>", methods=["GET"])
+def get_user(user_id):
+    # Request user data via FastStream
+    response = asyncio.create_task(
+        flask_faststream.publish("user-request", {"user_id": user_id})
+    )
+    
+    return jsonify({"user_id": user_id, "status": "requested"})
+
+# FastStream handlers
+@stream_app.subscribe("user-created")
+async def handle_flask_user_created(message: dict):
+    print(f"Flask user created: {message}")
+    return {"status": "processed"}
+
+@stream_app.subscribe("user-request")
+async def handle_flask_user_request(message: dict):
+    user_id = message["user_id"]
+    return {
+        "id": user_id,
+        "name": f"User {user_id}",
+        "email": f"user{user_id}@example.com"
+    }
+
+# Start FastStream
+flask_faststream.start()
+
+if __name__ == "__main__":
+    flask_app.run(debug=True)
+```
+
+## Database Integrations
+
+### SQLAlchemy Integration
+
+```python
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from faststream import FastStream, Depends
+from contextlib import contextmanager
+
+# SQLAlchemy setup
+Base = declarative_base()
+engine = create_engine("sqlite:///users.db")
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    email = Column(String, unique=True, index=True)
+
+Base.metadata.create_all(bind=engine)
+
+# FastStream app
+app = FastStream("sqlalchemy-service")
+
+@contextmanager
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Dependency injection for database
+async def get_db_session():
+    with get_db() as db:
+        yield db
+
+@app.subscribe("user-created")
+async def handle_user_created(message: dict, db=Depends(get_db_session)):
+    # Create user in database
+    user = User(
+        name=message["name"],
+        email=message["email"]
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    # Publish user created event
+    await app.publish("user-db-created", {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email
+    })
+    
+    return {"status": "user_created", "user_id": user.id}
+
+@app.subscribe("user-request")
+async def handle_user_request(message: dict, db=Depends(get_db_session)):
+    user_id = message["user_id"]
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if user:
+        return {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email
+        }
+    else:
+        return {"error": "User not found"}
+```
+
+### Redis Integration
+
+```python
+import redis.asyncio as redis
+from faststream import FastStream, Depends
+
+# Redis connection
+redis_client = redis.Redis(host="localhost", port=6379, db=0)
+
+app = FastStream("redis-service")
+
+async def get_redis():
+    return redis_client
+
+@app.subscribe("user-cache")
+async def handle_user_cache(message: dict, redis_client=Depends(get_redis)):
+    user_id = message["user_id"]
+    
+    # Check cache first
+    cached_user = await redis_client.get(f"user:{user_id}")
+    if cached_user:
+        return {"source": "cache", "user": cached_user}
+    
+    # Get from database and cache
+    user_data = await get_user_from_db(user_id)
+    if user_data:
+        await redis_client.setex(
+            f"user:{user_id}",
+            3600,  # 1 hour TTL
+            user_data
+        )
+        return {"source": "database", "user": user_data}
+    
+    return {"error": "User not found"}
+
+@app.subscribe("user-invalidate")
+async def handle_user_invalidate(message: dict, redis_client=Depends(get_redis)):
+    user_id = message["user_id"]
+    
+    # Invalidate cache
+    await redis_client.delete(f"user:{user_id}")
+    
+    return {"status": "cache_invalidated"}
+```
+
+## Monitoring and Observability
+
+### Prometheus Integration
+
+```python
+from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from faststream import FastStream, Context
+import time
+
+# Prometheus metrics
+message_counter = Counter(
+    'faststream_messages_total',
+    'Total messages processed',
+    ['topic', 'status']
+)
+
+message_duration = Histogram(
+    'faststream_message_duration_seconds',
+    'Message processing duration',
+    ['topic']
+)
+
+active_connections = Gauge(
+    'faststream_active_connections',
+    'Number of active broker connections'
+)
+
+app = FastStream("prometheus-service")
+
+@app.middleware
+async def prometheus_middleware(context: Context, call_next):
+    start_time = time.time()
+    
+    try:
+        result = await call_next(context)
+        
+        # Record success metrics
+        message_counter.labels(
+            topic=context.topic,
+            status="success"
+        ).inc()
+        
+        # Record duration
+        duration = time.time() - start_time
+        message_duration.labels(topic=context.topic).observe(duration)
+        
+        return result
+    except Exception as e:
+        # Record error metrics
+        message_counter.labels(
+            topic=context.topic,
+            status="error"
+        ).inc()
+        raise
+
+@app.subscribe("user-events")
+async def handle_user_events(message: dict):
+    return {"status": "processed"}
+
+# Prometheus metrics endpoint
+@app.get("/metrics")
+async def metrics_endpoint():
+    return generate_latest()
+```
+
+### Grafana Dashboard
+
+```json
+{
+  "dashboard": {
+    "title": "FastStream Metrics",
+    "panels": [
+      {
+        "title": "Messages Processed",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(faststream_messages_total[5m])",
+            "legendFormat": "{{topic}} - {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "Message Processing Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(faststream_message_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile - {{topic}}"
+          }
+        ]
+      },
+      {
+        "title": "Active Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "faststream_active_connections"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Jaeger Tracing
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from faststream import FastStream, Context
+
+# Configure Jaeger
+trace.set_tracer_provider(TracerProvider())
+jaeger_exporter = JaegerExporter(
+    agent_host_name="jaeger",
+    agent_port=6831,
+)
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(jaeger_exporter)
+)
+
+tracer = trace.get_tracer(__name__)
+
+app = FastStream("jaeger-service")
+
+@app.middleware
+async def jaeger_middleware(context: Context, call_next):
+    with tracer.start_as_current_span("process_message") as span:
+        span.set_attribute("topic", context.topic)
+        span.set_attribute("message_id", context.message_id)
+        
+        try:
+            result = await call_next(context)
+            span.set_attribute("status", "success")
+            return result
+        except Exception as e:
+            span.set_attribute("status", "error")
+            span.record_exception(e)
+            raise
+
+@app.subscribe("user-events")
+async def handle_user_events(message: dict):
+    with tracer.start_as_current_span("process_user_event") as span:
+        span.set_attribute("user_id", message.get("user_id"))
+        
+        # Process user event
+        result = await process_user_event(message)
+        
+        span.set_attribute("result", str(result))
+        return result
+```
+
+## Development Tools
+
+### FastStream CLI
+
+```bash
+# Install FastStream CLI
+pip install faststream[cli]
+
+# Run FastStream application
+faststream run app:app
+
+# Run with specific broker
+faststream run app:app --broker kafka
+
+# Run with configuration file
+faststream run app:app --config config.yaml
+
+# Generate AsyncAPI documentation
+faststream gen-docs app:app --output docs/asyncapi.json
+
+# Validate configuration
+faststream validate config.yaml
+
+# Test broker connection
+faststream test-broker kafka://localhost:9092
+```
+
+### Development Server
+
+```python
+# dev_server.py
+import uvicorn
+from faststream import FastStream
+from faststream.asgi import FastStreamRouter
+
+app = FastStream("dev-service")
+
+@app.subscribe("dev-events")
+async def handle_dev_events(message: dict):
+    print(f"Dev event: {message}")
+    return {"status": "processed"}
+
+# Create ASGI router
+router = FastStreamRouter(app)
+
+if __name__ == "__main__":
+    uvicorn.run(
+        router,
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="debug"
+    )
+```
+
+### Testing Utilities
+
+```python
+# test_utils.py
+import pytest
+from faststream import FastStream
+from faststream.testing import TestApp, TestBroker
+
+@pytest.fixture
+def faststream_app():
+    app = FastStream("test-app")
+    return app
+
+@pytest.fixture
+def test_broker():
+    return TestBroker()
+
+@pytest.mark.asyncio
+async def test_user_event_processing(faststream_app):
+    @faststream_app.subscribe("user-events")
+    async def handle_user_event(message: dict):
+        return {"processed": True, "user_id": message["user_id"]}
+    
+    async with TestApp(faststream_app):
+        result = await faststream_app.publish(
+            "user-events",
+            {"user_id": 123, "name": "John"}
+        )
+        
+        assert result["processed"] is True
+        assert result["user_id"] == 123
+
+@pytest.mark.asyncio
+async def test_broker_integration(test_broker):
+    app = FastStream("test-app", broker=test_broker)
+    
+    @app.subscribe("test-events")
+    async def handle_test_event(message: dict):
+        return {"status": "processed"}
+    
+    # Test publishing
+    result = await app.publish("test-events", {"data": "test"})
+    assert result["status"] == "processed"
+    
+    # Verify published messages
+    assert len(test_broker.published_messages) == 1
+    assert test_broker.published_messages[0]["topic"] == "test-events"
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/faststream.yml
+name: FastStream CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      kafka:
+        image: confluentinc/cp-kafka:latest
+        env:
+          KAFKA_ZOOKEEPER_CONNECT: localhost:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+        ports:
+          - 9092:9092
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=app
+      
+      - name: Run linting
+        run: |
+          flake8 app/
+          black --check app/
+      
+      - name: Build Docker image
+        run: |
+          docker build -t faststream-app .
+      
+      - name: Deploy to staging
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Deploy to staging environment
+          echo "Deploying to staging..."
+```
+
+### Docker Compose for Development
+
+```yaml
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  faststream-app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - KAFKA_BROKERS=kafka:9092
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+    depends_on:
+      - kafka
+      - redis
+    command: ["python", "dev_server.py"]
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "6831:6831"
+
+volumes:
+  grafana_data:
+```
+
+## Ecosystem Tools
+
+### FastStream Generator
+
+```python
+# generator.py
+from faststream.generator import FastStreamGenerator
+
+generator = FastStreamGenerator()
+
+# Generate FastStream application from OpenAPI spec
+app = generator.from_openapi(
+    "openapi.yaml",
+    broker="kafka://localhost:9092"
+)
+
+# Generate FastStream application from AsyncAPI spec
+app = generator.from_asyncapi(
+    "asyncapi.yaml",
+    broker="redis://localhost:6379"
+)
+
+# Generate FastStream application from database schema
+app = generator.from_database(
+    "postgresql://user:pass@localhost/db",
+    broker="nats://localhost:4222"
+)
+```
+
+### FastStream Inspector
+
+```python
+# inspector.py
+from faststream.inspector import FastStreamInspector
+
+inspector = FastStreamInspector()
+
+# Inspect FastStream application
+@app.subscribe("user-events")
+async def handle_user_events(message: dict):
+    return {"status": "processed"}
+
+# Get application information
+info = inspector.inspect(app)
+print(f"Topics: {info.topics}")
+print(f"Handlers: {info.handlers}")
+print(f"Broker: {info.broker}")
+
+# Validate application
+validation = inspector.validate(app)
+if validation.is_valid:
+    print("Application is valid")
+else:
+    print(f"Validation errors: {validation.errors}")
+```
+
+## Best Practices
+
+### Integration Patterns
+- Use dependency injection for external services
+- Implement proper error handling and retry logic
+- Use middleware for cross-cutting concerns
+- Implement comprehensive testing
+
+### Monitoring
+- Set up metrics collection with Prometheus
+- Use distributed tracing with Jaeger
+- Implement structured logging
+- Set up alerting for critical issues
+
+### Development
+- Use development tools and utilities
+- Implement proper CI/CD pipelines
+- Use containerization for consistency
+- Set up local development environments
+
+### Security
+- Validate all inputs and outputs
+- Implement authentication and authorization
+- Use secure connections and encryption
+- Follow security best practices
+description:
+globs:
+alwaysApply: false
+---

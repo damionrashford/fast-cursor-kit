@@ -1,0 +1,567 @@
+---
+description: Observability and monitoring with OpenTelemetry
+globs: ["**/*.py", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Open Telemetry
+
+**fast-agent** provides comprehensive OpenTelemetry support for observability of MCP and LLM interactions, enabling detailed monitoring, tracing, and metrics collection.
+
+## Overview
+
+OpenTelemetry integration allows you to:
+
+- **Trace** the flow of requests through your agent applications
+- **Monitor** LLM API calls and MCP server interactions
+- **Collect metrics** on performance, usage, and errors
+- **Debug** issues with detailed request/response logging
+- **Analyze** agent behavior and optimize performance
+
+## Configuration
+
+### Basic Setup
+
+Enable OpenTelemetry in your `fastagent.config.yaml`:
+
+```yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"
+  service_name: "fast-agent-app"
+  service_version: "1.0.0"
+```
+
+### Advanced Configuration
+
+```yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"
+  service_name: "my-agent-service"
+  service_version: "1.0.0"
+  
+  # Sampling configuration
+  sampling:
+    type: "parent_based_trace_id_ratio"
+    ratio: 1.0  # Sample 100% of traces
+  
+  # Resource attributes
+  resource:
+    environment: "production"
+    team: "ai-platform"
+    component: "agent-service"
+  
+  # Export configuration
+  export:
+    timeout: 30  # seconds
+    batch_size: 512
+    batch_timeout: 5  # seconds
+  
+  # Logging configuration
+  logging:
+    level: "INFO"
+    format: "json"
+```
+
+### Environment Variables
+
+You can also configure OpenTelemetry using environment variables:
+
+```bash
+export OTEL_ENABLED=true
+export OTEL_ENDPOINT=http://localhost:4318/v1/traces
+export OTEL_SERVICE_NAME=fast-agent-app
+export OTEL_SERVICE_VERSION=1.0.0
+```
+
+## Tracing
+
+### Automatic Tracing
+
+**fast-agent** automatically creates traces for:
+
+- **Agent interactions** - Each agent send/generate call
+- **LLM API calls** - Requests to language models
+- **MCP server interactions** - Tool calls and responses
+- **Workflow execution** - Chain, parallel, router operations
+- **Error handling** - Exceptions and failures
+
+### Trace Structure
+
+```
+fast-agent-app
+├── agent.send
+│   ├── llm.request
+│   │   ├── model.api_call
+│   │   └── response.processing
+│   └── mcp.tool_call (if applicable)
+│       ├── tool.execution
+│       └── tool.response
+└── workflow.execution (for workflows)
+    ├── step.1
+    ├── step.2
+    └── step.n
+```
+
+### Custom Tracing
+
+Add custom spans to your agent code:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Tracing App")
+
+@fast.agent("tracing_agent", "Agent with custom tracing", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        with tracer.start_as_current_span("custom_operation") as span:
+            span.set_attribute("operation.type", "data_processing")
+            span.set_attribute("operation.input_size", len("Hello"))
+            
+            response = await agent.tracing_agent.send("Hello")
+            
+            span.set_attribute("operation.output_size", len(response))
+            span.set_attribute("operation.success", True)
+            
+            print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Span Attributes
+
+**fast-agent** automatically adds useful attributes to spans:
+
+#### Agent Spans
+- `agent.name` - Name of the agent
+- `agent.model` - Model being used
+- `agent.instruction_length` - Length of agent instructions
+- `agent.message_length` - Length of input message
+
+#### LLM Spans
+- `llm.provider` - LLM provider (openai, anthropic, etc.)
+- `llm.model` - Specific model name
+- `llm.request.tokens` - Input tokens
+- `llm.response.tokens` - Output tokens
+- `llm.response.time_ms` - Response time in milliseconds
+- `llm.cost.estimated` - Estimated cost of the request
+
+#### MCP Spans
+- `mcp.server.name` - MCP server name
+- `mcp.tool.name` - Tool being called
+- `mcp.tool.arguments` - Tool arguments (sanitized)
+- `mcp.tool.response_size` - Size of tool response
+- `mcp.tool.duration_ms` - Tool execution time
+
+## Metrics
+
+### Built-in Metrics
+
+**fast-agent** automatically collects the following metrics:
+
+#### Agent Metrics
+- `fast_agent.agent.calls_total` - Total number of agent calls
+- `fast_agent.agent.calls_duration_seconds` - Duration of agent calls
+- `fast_agent.agent.errors_total` - Total number of agent errors
+
+#### LLM Metrics
+- `fast_agent.llm.requests_total` - Total LLM API requests
+- `fast_agent.llm.requests_duration_seconds` - LLM request duration
+- `fast_agent.llm.tokens.input_total` - Total input tokens
+- `fast_agent.llm.tokens.output_total` - Total output tokens
+- `fast_agent.llm.cost.total` - Total estimated cost
+- `fast_agent.llm.errors_total` - Total LLM errors
+
+#### MCP Metrics
+- `fast_agent.mcp.tool_calls_total` - Total MCP tool calls
+- `fast_agent.mcp.tool_calls_duration_seconds` - Tool call duration
+- `fast_agent.mcp.server_connections_total` - MCP server connections
+- `fast_agent.mcp.errors_total` - Total MCP errors
+
+### Custom Metrics
+
+Add custom metrics to your application:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import metrics
+
+meter = metrics.get_meter(__name__)
+custom_counter = meter.create_counter("custom_operations_total")
+custom_histogram = meter.create_histogram("custom_duration_seconds")
+
+fast = FastAgent("Metrics App")
+
+@fast.agent("metrics_agent", "Agent with custom metrics", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        # Record custom metric
+        custom_counter.add(1, {"operation": "data_processing"})
+        
+        # Measure custom operation
+        with custom_histogram.record_duration({"operation": "custom_task"}):
+            response = await agent.metrics_agent.send("Hello")
+        
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Logging
+
+### Structured Logging
+
+**fast-agent** provides structured logging with OpenTelemetry integration:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "INFO"
+  format: "json"
+  otel:
+    enabled: true
+    include_trace_id: true
+    include_span_id: true
+```
+
+### Log Correlation
+
+Logs are automatically correlated with traces:
+
+```python
+import asyncio
+import logging
+from mcp_agent.core.fastagent import FastAgent
+
+logger = logging.getLogger(__name__)
+
+fast = FastAgent("Logging App")
+
+@fast.agent("logging_agent", "Agent with logging", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        logger.info("Starting agent interaction", extra={
+            "user_id": "12345",
+            "session_id": "session_67890"
+        })
+        
+        response = await agent.logging_agent.send("Hello")
+        
+        logger.info("Agent response received", extra={
+            "response_length": len(response),
+            "response_time_ms": 150
+        })
+        
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Observability Backends
+
+### Jaeger
+
+Jaeger is a popular distributed tracing system. Set up Jaeger for **fast-agent**:
+
+```yaml
+# fastagent.config.yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:14268/api/traces"
+  service_name: "fast-agent-app"
+```
+
+Start Jaeger with Docker:
+
+```bash
+docker run -d --name jaeger \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 16686:16686 \
+  -p 14268:14268 \
+  jaegertracing/all-in-one:latest
+```
+
+### Prometheus + Grafana
+
+For metrics collection and visualization:
+
+```yaml
+# fastagent.config.yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"
+  metrics_endpoint: "http://localhost:4318/v1/metrics"
+  service_name: "fast-agent-app"
+```
+
+### Zipkin
+
+For Zipkin tracing:
+
+```yaml
+# fastagent.config.yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:9411/api/v2/spans"
+  service_name: "fast-agent-app"
+```
+
+## Performance Monitoring
+
+### Request Tracing
+
+Monitor the performance of your agent applications:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Performance App")
+
+@fast.agent("perf_agent", "Performance monitoring agent", model="gpt-4o")
+async def main():
+    async with fast.run() as agent:
+        with tracer.start_as_current_span("user_request") as span:
+            # Add user context
+            span.set_attribute("user.id", "user_123")
+            span.set_attribute("request.type", "analysis")
+            
+            # Monitor agent performance
+            with tracer.start_as_current_span("agent_processing") as agent_span:
+                response = await agent.perf_agent.send("Analyze this data")
+                agent_span.set_attribute("response.length", len(response))
+            
+            print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Error Tracking
+
+Track and analyze errors:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Error Tracking App")
+
+@fast.agent("error_agent", "Error tracking agent", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        try:
+            with tracer.start_as_current_span("risky_operation") as span:
+                response = await agent.error_agent.send("Perform risky operation")
+                span.set_attribute("operation.success", True)
+                print(response)
+        except Exception as e:
+            # Record error in span
+            span = trace.get_current_span()
+            span.record_exception(e)
+            span.set_attribute("operation.success", False)
+            span.set_attribute("error.type", type(e).__name__)
+            span.set_attribute("error.message", str(e))
+            
+            print(f"Error occurred: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Debugging
+
+### Trace Analysis
+
+Use traces to debug issues:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Debug App")
+
+@fast.agent("debug_agent", "Debug agent", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        with tracer.start_as_current_span("debug_session") as span:
+            # Add debug information
+            span.set_attribute("debug.session_id", "debug_12345")
+            span.set_attribute("debug.user_input", "test message")
+            
+            # Add events for debugging
+            span.add_event("agent_call_started")
+            response = await agent.debug_agent.send("test message")
+            span.add_event("agent_call_completed", {
+                "response_length": len(response),
+                "response_preview": response[:100]
+            })
+            
+            print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Performance Profiling
+
+Profile agent performance:
+
+```python
+import asyncio
+import time
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Profiling App")
+
+@fast.agent("profiling_agent", "Profiling agent", model="gpt-4o")
+async def main():
+    async with fast.run() as agent:
+        with tracer.start_as_current_span("performance_profile") as span:
+            start_time = time.time()
+            
+            # Profile different operations
+            with tracer.start_as_current_span("message_processing") as msg_span:
+                response = await agent.profiling_agent.send("Complex analysis request")
+                msg_span.set_attribute("processing.time_ms", (time.time() - start_time) * 1000)
+            
+            total_time = time.time() - start_time
+            span.set_attribute("total.duration_ms", total_time * 1000)
+            span.set_attribute("response.size_bytes", len(response.encode()))
+            
+            print(f"Response: {response}")
+            print(f"Total time: {total_time:.2f}s")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Production Deployment
+
+### Configuration for Production
+
+```yaml
+# fastagent.config.yaml
+otel:
+  enabled: true
+  otlp_endpoint: "https://your-otel-collector.com:4318/v1/traces"
+  service_name: "fast-agent-production"
+  service_version: "1.0.0"
+  
+  # Production sampling
+  sampling:
+    type: "parent_based_trace_id_ratio"
+    ratio: 0.1  # Sample 10% of traces in production
+  
+  # Resource attributes for production
+  resource:
+    environment: "production"
+    service.namespace: "ai-platform"
+    service.instance.id: "${HOSTNAME}"
+  
+  # Export configuration for production
+  export:
+    timeout: 60
+    batch_size: 1024
+    batch_timeout: 10
+  
+  # Security
+  headers:
+    Authorization: "Bearer ${OTEL_AUTH_TOKEN}"
+
+logging:
+  level: "WARNING"
+  format: "json"
+  otel:
+    enabled: true
+    include_trace_id: true
+    include_span_id: true
+```
+
+### Health Checks
+
+Monitor the health of your OpenTelemetry integration:
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+fast = FastAgent("Health Check App")
+
+@fast.agent("health_agent", "Health check agent", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        # Health check span
+        with tracer.start_as_current_span("health_check") as span:
+            try:
+                response = await agent.health_agent.send("Health check")
+                span.set_attribute("health.status", "healthy")
+                span.set_attribute("health.response_time_ms", 50)
+                print("Health check passed")
+            except Exception as e:
+                span.record_exception(e)
+                span.set_attribute("health.status", "unhealthy")
+                print(f"Health check failed: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Best Practices
+
+### Trace Design
+
+1. **Use meaningful span names** - Make spans easy to understand
+2. **Add relevant attributes** - Include useful context in spans
+3. **Keep spans focused** - Each span should represent a single operation
+4. **Use proper span relationships** - Parent-child relationships for nested operations
+
+### Performance
+
+1. **Sample appropriately** - Use sampling to reduce overhead in production
+2. **Batch exports** - Configure batch sizes for efficient export
+3. **Monitor overhead** - Track the impact of tracing on performance
+4. **Use async operations** - Don't block on trace export
+
+### Security
+
+1. **Sanitize sensitive data** - Don't log sensitive information in spans
+2. **Use secure endpoints** - Use HTTPS for OTLP endpoints
+3. **Implement authentication** - Use proper auth for observability backends
+4. **Monitor access** - Track who has access to traces and metrics
+
+### Maintenance
+
+1. **Regular monitoring** - Check that traces are being collected
+2. **Update configurations** - Keep OpenTelemetry configuration current
+3. **Review sampling rates** - Adjust sampling based on volume and needs
+4. **Clean up old data** - Implement retention policies for traces and metrics
+
+---
+
+*Source: [https://fast-agent.ai/ref/open_telemetry/](https://fast-agent.ai/ref/open_telemetry/)*

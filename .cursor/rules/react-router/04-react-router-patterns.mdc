@@ -1,0 +1,854 @@
+# React Router Advanced Patterns and Best Practices
+
+## Data Loading Patterns
+
+### 1. **Parallel Data Loading**
+
+Load multiple data sources simultaneously for better performance.
+
+```typescript
+// Route with parallel loaders
+export async function loader({ params }: LoaderFunctionArgs) {
+  const [user, posts, notifications] = await Promise.all([
+    getUser(params.userId),
+    getPosts(params.userId),
+    getNotifications(params.userId)
+  ]);
+  
+  return { user, posts, notifications };
+}
+
+// Component using parallel data
+function UserDashboard() {
+  const { user, posts, notifications } = useLoaderData();
+  
+  return (
+    <div>
+      <UserProfile user={user} />
+      <PostsList posts={posts} />
+      <NotificationsPanel notifications={notifications} />
+    </div>
+  );
+}
+```
+
+### 2. **Sequential Data Loading**
+
+Load data that depends on previous data.
+
+```typescript
+export async function loader({ params }: LoaderFunctionArgs) {
+  const user = await getUser(params.userId);
+  const userPosts = await getPostsByUser(user.id);
+  const userStats = await getUserStats(user.id);
+  
+  return { user, posts: userPosts, stats: userStats };
+}
+```
+
+### 3. **Conditional Data Loading**
+
+Load data based on conditions or user permissions.
+
+```typescript
+export async function loader({ params, request }: LoaderFunctionArgs) {
+  const user = await getCurrentUser(request);
+  
+  if (!user) {
+    throw redirect("/login");
+  }
+  
+  if (user.role === "admin") {
+    const [posts, analytics] = await Promise.all([
+      getAllPosts(),
+      getAnalytics()
+    ]);
+    return { posts, analytics, isAdmin: true };
+  }
+  
+  const posts = await getUserPosts(user.id);
+  return { posts, isAdmin: false };
+}
+```
+
+### 4. **Error Boundary Pattern**
+
+Handle errors gracefully with dedicated error components.
+
+```typescript
+// Error boundary component
+function PostErrorBoundary() {
+  const error = useRouteError();
+  
+  if (isRouteErrorResponse(error)) {
+    if (error.status === 404) {
+      return <PostNotFound />;
+    }
+    
+    if (error.status === 403) {
+      return <AccessDenied />;
+    }
+  }
+  
+  return (
+    <div className="error-page">
+      <h1>Oops! Something went wrong.</h1>
+      <p>{error.message || "An unexpected error occurred."}</p>
+      <Link to="/">Go Home</Link>
+    </div>
+  );
+}
+
+// Route with error boundary
+<Route 
+  path="/posts/:id" 
+  element={<PostDetail />}
+  loader={postLoader}
+  errorElement={<PostErrorBoundary />}
+/>
+```
+
+## Form Handling Patterns
+
+### 1. **Optimistic Updates**
+
+Provide immediate feedback while processing form submissions.
+
+```typescript
+function CreatePost() {
+  const fetcher = useFetcher();
+  const [optimisticPosts, setOptimisticPosts] = useState([]);
+  
+  const handleSubmit = (formData: FormData) => {
+    const newPost = {
+      id: `temp-${Date.now()}`,
+      title: formData.get("title") as string,
+      content: formData.get("content") as string,
+      isOptimistic: true
+    };
+    
+    setOptimisticPosts(prev => [newPost, ...prev]);
+    
+    fetcher.submit(formData, { method: "post" });
+  };
+  
+  return (
+    <div>
+      <fetcher.Form onSubmit={handleSubmit}>
+        <input name="title" required />
+        <textarea name="content" required />
+        <button type="submit">Create Post</button>
+      </fetcher.Form>
+      
+      <PostsList posts={optimisticPosts} />
+    </div>
+  );
+}
+```
+
+### 2. **Form Validation Pattern**
+
+Comprehensive form validation with error handling.
+
+```typescript
+// Action with validation
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const title = formData.get("title") as string;
+  const content = formData.get("content") as string;
+  
+  const errors: Record<string, string> = {};
+  
+  if (!title.trim()) {
+    errors.title = "Title is required";
+  } else if (title.length < 3) {
+    errors.title = "Title must be at least 3 characters";
+  }
+  
+  if (!content.trim()) {
+    errors.content = "Content is required";
+  } else if (content.length < 10) {
+    errors.content = "Content must be at least 10 characters";
+  }
+  
+  if (Object.keys(errors).length > 0) {
+    return json({ errors }, { status: 400 });
+  }
+  
+  const post = await createPost({ title, content });
+  return redirect(`/posts/${post.id}`);
+}
+
+// Component with validation display
+function CreatePostForm() {
+  const actionData = useActionData<{ errors?: Record<string, string> }>();
+  const navigation = useNavigation();
+  
+  const isSubmitting = navigation.state === "submitting";
+  
+  return (
+    <Form method="post">
+      <div>
+        <label htmlFor="title">Title</label>
+        <input 
+          id="title" 
+          name="title" 
+          type="text" 
+          required 
+          aria-invalid={actionData?.errors?.title ? "true" : "false"}
+        />
+        {actionData?.errors?.title && (
+          <span className="error" role="alert">
+            {actionData.errors.title}
+          </span>
+        )}
+      </div>
+      
+      <div>
+        <label htmlFor="content">Content</label>
+        <textarea 
+          id="content" 
+          name="content" 
+          required 
+          aria-invalid={actionData?.errors?.content ? "true" : "false"}
+        />
+        {actionData?.errors?.content && (
+          <span className="error" role="alert">
+            {actionData.errors.content}
+          </span>
+        )}
+      </div>
+      
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Creating..." : "Create Post"}
+      </button>
+    </Form>
+  );
+}
+```
+
+### 3. **Multi-step Form Pattern**
+
+Handle complex multi-step forms with state management.
+
+```typescript
+function MultiStepForm() {
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({});
+  const fetcher = useFetcher();
+  
+  const updateFormData = (newData: any) => {
+    setFormData(prev => ({ ...prev, ...newData }));
+  };
+  
+  const nextStep = () => setStep(prev => prev + 1);
+  const prevStep = () => setStep(prev => prev - 1);
+  
+  const handleSubmit = (finalData: any) => {
+    fetcher.submit(
+      { ...formData, ...finalData },
+      { method: "post", action: "/api/submit" }
+    );
+  };
+  
+  return (
+    <div>
+      <StepIndicator currentStep={step} totalSteps={3} />
+      
+      {step === 1 && (
+        <Step1 
+          data={formData} 
+          onUpdate={updateFormData} 
+          onNext={nextStep} 
+        />
+      )}
+      
+      {step === 2 && (
+        <Step2 
+          data={formData} 
+          onUpdate={updateFormData} 
+          onNext={nextStep} 
+          onBack={prevStep} 
+        />
+      )}
+      
+      {step === 3 && (
+        <Step3 
+          data={formData} 
+          onSubmit={handleSubmit} 
+          onBack={prevStep} 
+        />
+      )}
+    </div>
+  );
+}
+```
+
+## Navigation Patterns
+
+### 1. **Breadcrumb Navigation**
+
+Dynamic breadcrumb navigation based on route structure.
+
+```typescript
+function Breadcrumbs() {
+  const matches = useMatches();
+  const location = useLocation();
+  
+  const breadcrumbs = matches
+    .filter(match => match.handle?.breadcrumb)
+    .map((match, index) => ({
+      name: match.handle.breadcrumb,
+      path: match.pathname,
+      isLast: index === matches.length - 1
+    }));
+  
+  return (
+    <nav aria-label="Breadcrumb">
+      <ol>
+        <li>
+          <Link to="/">Home</Link>
+        </li>
+        {breadcrumbs.map((crumb, index) => (
+          <li key={crumb.path}>
+            {crumb.isLast ? (
+              <span aria-current="page">{crumb.name}</span>
+            ) : (
+              <Link to={crumb.path}>{crumb.name}</Link>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+// Route with breadcrumb handle
+<Route 
+  path="/posts/:id" 
+  element={<PostDetail />}
+  handle={{ breadcrumb: "Post Detail" }}
+/>
+```
+
+### 2. **Tab Navigation Pattern**
+
+Tab-based navigation with URL synchronization.
+
+```typescript
+function UserProfile() {
+  const { userId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  const tabs = [
+    { id: "profile", label: "Profile", path: `/users/${userId}` },
+    { id: "posts", label: "Posts", path: `/users/${userId}/posts` },
+    { id: "settings", label: "Settings", path: `/users/${userId}/settings` }
+  ];
+  
+  const currentTab = tabs.find(tab => 
+    location.pathname === tab.path
+  ) || tabs[0];
+  
+  return (
+    <div>
+      <nav role="tablist">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={currentTab.id === tab.id}
+            onClick={() => navigate(tab.path)}
+            className={currentTab.id === tab.id ? "active" : ""}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      
+      <div role="tabpanel">
+        <Outlet />
+      </div>
+    </div>
+  );
+}
+```
+
+### 3. **Modal Navigation Pattern**
+
+Handle modal dialogs with URL state.
+
+```typescript
+function PostList() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const postId = searchParams.get("post");
+  
+  return (
+    <div>
+      <h1>Posts</h1>
+      <PostsList />
+      
+      {postId && (
+        <Modal
+          onClose={() => setSearchParams({})}
+          aria-label="Post Details"
+        >
+          <PostDetail postId={postId} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function PostCard({ post }: { post: Post }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const openModal = () => {
+    setSearchParams({ post: post.id });
+  };
+  
+  return (
+    <div>
+      <h3>{post.title}</h3>
+      <button onClick={openModal}>View Details</button>
+    </div>
+  );
+}
+```
+
+## Authentication Patterns
+
+### 1. **Protected Route Pattern**
+
+Comprehensive route protection with authentication.
+
+```typescript
+function ProtectedRoute({ 
+  children, 
+  requiredRole,
+  redirectTo = "/login" 
+}: { 
+  children: React.ReactNode;
+  requiredRole?: string;
+  redirectTo?: string;
+}) {
+  const { user } = useAuth();
+  const location = useLocation();
+  
+  if (!user) {
+    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+  }
+  
+  if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+// Usage in routes
+<Route 
+  path="/admin" 
+  element={
+    <ProtectedRoute requiredRole="admin">
+      <AdminPanel />
+    </ProtectedRoute>
+  }
+/>
+```
+
+### 2. **Authentication Context Pattern**
+
+Global authentication state management.
+
+```typescript
+interface AuthContextType {
+  user: User | null;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: () => void;
+  isLoading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  
+  const login = async (credentials: LoginCredentials) => {
+    setIsLoading(true);
+    try {
+      const user = await loginUser(credentials);
+      setUser(user);
+      navigate("/dashboard", { replace: true });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const logout = () => {
+    setUser(null);
+    navigate("/login", { replace: true });
+  };
+  
+  useEffect(() => {
+    // Check for existing session
+    checkAuth().then(setUser).finally(() => setIsLoading(false));
+  }, []);
+  
+  return (
+    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+}
+```
+
+## Performance Patterns
+
+### 1. **Code Splitting Pattern**
+
+Route-based code splitting for better performance.
+
+```typescript
+// Lazy load components
+const Dashboard = lazy(() => import("./Dashboard"));
+const AdminPanel = lazy(() => import("./AdminPanel"));
+const UserProfile = lazy(() => import("./UserProfile"));
+
+// Route configuration with lazy loading
+const routes = [
+  {
+    path: "/",
+    element: <Root />,
+    children: [
+      {
+        index: true,
+        element: <Home />
+      },
+      {
+        path: "dashboard",
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <Dashboard />
+          </Suspense>
+        )
+      },
+      {
+        path: "admin",
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <AdminPanel />
+          </Suspense>
+        )
+      }
+    ]
+  }
+];
+```
+
+### 2. **Data Prefetching Pattern**
+
+Prefetch data for better user experience.
+
+```typescript
+function PostCard({ post }: { post: Post }) {
+  const fetcher = useFetcher();
+  
+  const prefetchPost = () => {
+    fetcher.load(`/posts/${post.id}`);
+  };
+  
+  return (
+    <div 
+      onMouseEnter={prefetchPost}
+      onFocus={prefetchPost}
+    >
+      <h3>{post.title}</h3>
+      <Link to={`/posts/${post.id}`}>Read More</Link>
+    </div>
+  );
+}
+```
+
+### 3. **Caching Pattern**
+
+Implement intelligent data caching.
+
+```typescript
+function useCachedData<T>(key: string, fetcher: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const loadData = useCallback(async () => {
+    // Check cache first
+    const cached = sessionStorage.getItem(key);
+    if (cached) {
+      setData(JSON.parse(cached));
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const result = await fetcher();
+      setData(result);
+      sessionStorage.setItem(key, JSON.stringify(result));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [key, fetcher]);
+  
+  return { data, isLoading, refetch: loadData };
+}
+```
+
+## Testing Patterns
+
+### 1. **Route Testing Pattern**
+
+Comprehensive testing of routing logic.
+
+```typescript
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+
+function renderWithRouter(
+  ui: React.ReactElement,
+  { route = "/", initialEntries = [route] } = {}
+) {
+  return {
+    ...render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>
+          <Route path="*" element={ui} />
+        </Routes>
+      </MemoryRouter>
+    )
+  };
+}
+
+test("navigates to post detail", () => {
+  renderWithRouter(<PostList />, { route: "/posts" });
+  
+  const postLink = screen.getByText("View Post");
+  fireEvent.click(postLink);
+  
+  expect(screen.getByText("Post Details")).toBeInTheDocument();
+});
+```
+
+### 2. **Loader Testing Pattern**
+
+Test data loading functions.
+
+```typescript
+import { createRemixStub } from "@remix-run/testing";
+
+test("loads post data", async () => {
+  const RemixStub = createRemixStub([
+    {
+      path: "/posts/:id",
+      loader: () => ({ post: { id: "1", title: "Test Post" } }),
+      Component: PostDetail
+    }
+  ]);
+  
+  render(<RemixStub initialEntries={["/posts/1"]} />);
+  
+  await screen.findByText("Test Post");
+});
+```
+
+### 3. **Action Testing Pattern**
+
+Test form submission actions.
+
+```typescript
+test("submits form data", async () => {
+  const mockAction = jest.fn();
+  
+  const RemixStub = createRemixStub([
+    {
+      path: "/posts/new",
+      action: mockAction,
+      Component: CreatePost
+    }
+  ]);
+  
+  render(<RemixStub />);
+  
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "New Post" }
+  });
+  
+  fireEvent.click(screen.getByText("Create Post"));
+  
+  expect(mockAction).toHaveBeenCalledWith(
+    expect.objectContaining({
+      formData: expect.any(FormData)
+    })
+  );
+});
+```
+
+## Error Handling Patterns
+
+### 1. **Global Error Boundary**
+
+Handle unexpected errors application-wide.
+
+```typescript
+function GlobalErrorBoundary() {
+  const error = useRouteError();
+  
+  if (isRouteErrorResponse(error)) {
+    return (
+      <div className="error-page">
+        <h1>{error.status} {error.statusText}</h1>
+        <p>{error.data}</p>
+      </div>
+    );
+  }
+  
+  if (error instanceof Error) {
+    return (
+      <div className="error-page">
+        <h1>Something went wrong</h1>
+        <p>{error.message}</p>
+        <pre>{error.stack}</pre>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="error-page">
+      <h1>Unknown Error</h1>
+      <p>An unexpected error occurred.</p>
+    </div>
+  );
+}
+```
+
+### 2. **Retry Pattern**
+
+Implement retry logic for failed requests.
+
+```typescript
+function useRetry<T>(
+  fetcher: () => Promise<T>,
+  maxRetries = 3,
+  delay = 1000
+) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  const execute = useCallback(async () => {
+    try {
+      const result = await fetcher();
+      setData(result);
+      setError(null);
+      setRetryCount(0);
+    } catch (err) {
+      setError(err as Error);
+      if (retryCount < maxRetries) {
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          execute();
+        }, delay * Math.pow(2, retryCount)); // Exponential backoff
+      }
+    }
+  }, [fetcher, maxRetries, delay, retryCount]);
+  
+  return { data, error, retryCount, retry: execute };
+}
+```
+
+## Accessibility Patterns
+
+### 1. **Focus Management**
+
+Proper focus management for navigation.
+
+```typescript
+function useFocusManagement() {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Focus the main content area on navigation
+    const main = document.querySelector("main");
+    if (main) {
+      main.focus();
+    }
+  }, [location]);
+  
+  return null;
+}
+
+function App() {
+  useFocusManagement();
+  
+  return (
+    <div>
+      <nav>
+        <Link to="/">Home</Link>
+        <Link to="/about">About</Link>
+      </nav>
+      <main tabIndex={-1}>
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+```
+
+### 2. **Skip Links**
+
+Provide skip navigation links for accessibility.
+
+```typescript
+function SkipLinks() {
+  return (
+    <nav className="skip-links">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      <a href="#navigation" className="skip-link">
+        Skip to navigation
+      </a>
+    </nav>
+  );
+}
+
+// CSS for skip links
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: #000;
+  color: #fff;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 1000;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+```
+
+This comprehensive patterns reference provides advanced techniques and best practices for building robust, performant, and accessible React Router applications.
+description:
+globs:
+alwaysApply: false
+---

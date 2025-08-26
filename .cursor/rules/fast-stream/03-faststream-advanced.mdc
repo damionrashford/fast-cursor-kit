@@ -1,0 +1,761 @@
+# FastStream Advanced Features
+
+FastStream provides powerful advanced features for building robust, scalable microservices. This guide covers dependency injection, middleware, serialization, testing, observability, and integration patterns.
+
+## Dependency Injection
+
+### Basic Dependency Injection
+
+FastStream provides a powerful dependency injection system similar to FastAPI:
+
+```python
+from faststream import FastStream, Depends
+from pydantic import BaseModel
+
+class UserEvent(BaseModel):
+    user_id: int
+    name: str
+
+class UserService:
+    def __init__(self):
+        self.users = {}
+    
+    async def get_user(self, user_id: int):
+        return self.users.get(user_id)
+    
+    async def create_user(self, user: UserEvent):
+        self.users[user.user_id] = user
+        return user
+
+app = FastStream("user-service")
+
+# Dependency function
+async def get_user_service() -> UserService:
+    return UserService()
+
+@app.subscribe("user-events")
+async def handle_user_event(
+    message: UserEvent,
+    user_service: UserService = Depends(get_user_service)
+):
+    user = await user_service.get_user(message.user_id)
+    if not user:
+        user = await user_service.create_user(message)
+    return {"status": "processed", "user": user}
+```
+
+### Scoped Dependencies
+
+```python
+from faststream import Depends
+from contextlib import asynccontextmanager
+
+class DatabaseConnection:
+    def __init__(self):
+        self.connected = False
+    
+    async def connect(self):
+        self.connected = True
+        print("Database connected")
+    
+    async def disconnect(self):
+        self.connected = False
+        print("Database disconnected")
+
+# Scoped dependency
+@asynccontextmanager
+async def get_db_connection():
+    db = DatabaseConnection()
+    await db.connect()
+    try:
+        yield db
+    finally:
+        await db.disconnect()
+
+@app.subscribe("user-events")
+async def handle_with_db(
+    message: UserEvent,
+    db: DatabaseConnection = Depends(get_db_connection)
+):
+    # Use database connection
+    return {"status": "processed", "db_connected": db.connected}
+```
+
+### Dependency with Parameters
+
+```python
+from faststream import Depends
+
+class CacheService:
+    def __init__(self, ttl: int = 300):
+        self.ttl = ttl
+        self.cache = {}
+    
+    async def get(self, key: str):
+        return self.cache.get(key)
+    
+    async def set(self, key: str, value: any):
+        self.cache[key] = value
+
+# Dependency with parameters
+def get_cache_service(ttl: int = 300) -> CacheService:
+    return CacheService(ttl)
+
+@app.subscribe("user-events")
+async def handle_with_cache(
+    message: UserEvent,
+    cache: CacheService = Depends(get_cache_service, ttl=600)
+):
+    cached_user = await cache.get(f"user:{message.user_id}")
+    if not cached_user:
+        await cache.set(f"user:{message.user_id}", message)
+    return {"status": "processed"}
+```
+
+## Middleware
+
+### Basic Middleware
+
+Middleware allows you to process messages before and after they reach your handlers:
+
+```python
+from faststream import FastStream, Context
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+app = FastStream("middleware-service")
+
+@app.middleware
+async def logging_middleware(context: Context, call_next):
+    start_time = time.time()
+    
+    # Log incoming message
+    logger.info(f"Processing message: {context.message}")
+    
+    try:
+        # Call next middleware/handler
+        result = await call_next(context)
+        
+        # Log success
+        processing_time = time.time() - start_time
+        logger.info(f"Message processed successfully in {processing_time:.2f}s")
+        
+        return result
+    except Exception as e:
+        # Log error
+        processing_time = time.time() - start_time
+        logger.error(f"Message processing failed after {processing_time:.2f}s: {e}")
+        raise
+```
+
+### Authentication Middleware
+
+```python
+from faststream import Context
+from typing import Optional
+
+class AuthMiddleware:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+    
+    async def __call__(self, context: Context, call_next):
+        # Extract API key from message headers
+        headers = getattr(context.message, 'headers', {})
+        api_key = headers.get('x-api-key')
+        
+        if api_key != self.api_key:
+            raise ValueError("Invalid API key")
+        
+        # Continue processing
+        return await call_next(context)
+
+# Apply authentication middleware
+app = FastStream("auth-service")
+app.add_middleware(AuthMiddleware("secret-key"))
+
+@app.subscribe("user-events")
+async def handle_authenticated_event(message: UserEvent):
+    return {"status": "authenticated", "user": message}
+```
+
+### Rate Limiting Middleware
+
+```python
+import asyncio
+from collections import defaultdict
+from faststream import Context
+
+class RateLimitMiddleware:
+    def __init__(self, max_requests: int = 100, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = defaultdict(list)
+    
+    async def __call__(self, context: Context, call_next):
+        # Get client identifier (could be from headers, IP, etc.)
+        client_id = getattr(context.message, 'client_id', 'default')
+        
+        now = time.time()
+        
+        # Clean old requests
+        self.requests[client_id] = [
+            req_time for req_time in self.requests[client_id]
+            if now - req_time < self.window_seconds
+        ]
+        
+        # Check rate limit
+        if len(self.requests[client_id]) >= self.max_requests:
+            raise ValueError("Rate limit exceeded")
+        
+        # Add current request
+        self.requests[client_id].append(now)
+        
+        # Continue processing
+        return await call_next(context)
+
+app = FastStream("rate-limited-service")
+app.add_middleware(RateLimitMiddleware(max_requests=10, window_seconds=60))
+```
+
+### Error Handling Middleware
+
+```python
+from faststream import Context
+import traceback
+
+@app.middleware
+async def error_handling_middleware(context: Context, call_next):
+    try:
+        return await call_next(context)
+    except ValueError as e:
+        # Handle validation errors
+        print(f"Validation error: {e}")
+        return {"status": "validation_error", "error": str(e)}
+    except Exception as e:
+        # Handle unexpected errors
+        print(f"Unexpected error: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        # Send to error queue
+        await context.publish("error-queue", {
+            "error": str(e),
+            "message": context.message,
+            "traceback": traceback.format_exc()
+        })
+        
+        return {"status": "error", "error": "Internal server error"}
+```
+
+## Serialization
+
+### Custom Serializers
+
+FastStream supports custom serialization for different message formats:
+
+```python
+import json
+import pickle
+from faststream import FastStream
+from pydantic import BaseModel
+
+class UserEvent(BaseModel):
+    user_id: int
+    name: str
+
+# JSON Serializer
+class JSONSerializer:
+    @staticmethod
+    def serialize(message: BaseModel) -> bytes:
+        return json.dumps(message.dict()).encode('utf-8')
+    
+    @staticmethod
+    def deserialize(data: bytes) -> dict:
+        return json.loads(data.decode('utf-8'))
+
+# Pickle Serializer
+class PickleSerializer:
+    @staticmethod
+    def serialize(message: BaseModel) -> bytes:
+        return pickle.dumps(message.dict())
+    
+    @staticmethod
+    def deserialize(data: bytes) -> dict:
+        return pickle.loads(data)
+
+# Use custom serializer
+app = FastStream("custom-serializer-service")
+
+@app.subscribe("user-events")
+async def handle_json_message(message: UserEvent):
+    return {"status": "processed", "format": "json"}
+
+# Configure with custom serializer
+broker = KafkaBroker(
+    "localhost:9092",
+    serializer=JSONSerializer.serialize,
+    deserializer=JSONSerializer.deserialize
+)
+```
+
+### Message Format Validation
+
+```python
+from pydantic import BaseModel, ValidationError
+from typing import Union
+
+class UserEvent(BaseModel):
+    user_id: int
+    name: str
+
+class OrderEvent(BaseModel):
+    order_id: str
+    amount: float
+
+@app.subscribe("events")
+async def handle_multiple_formats(message: Union[UserEvent, OrderEvent]):
+    if isinstance(message, UserEvent):
+        return {"type": "user", "data": message}
+    elif isinstance(message, OrderEvent):
+        return {"type": "order", "data": message}
+    else:
+        raise ValueError("Unknown message format")
+```
+
+## Testing
+
+### In-Memory Testing
+
+FastStream provides comprehensive testing utilities:
+
+```python
+import pytest
+from faststream import FastStream
+from faststream.testing import TestApp, TestBroker
+from pydantic import BaseModel
+
+class UserEvent(BaseModel):
+    user_id: int
+    name: str
+
+@pytest.mark.asyncio
+async def test_user_event_handling():
+    app = FastStream("test-service")
+    
+    @app.subscribe("user-events")
+    async def handle_user_event(message: UserEvent):
+        return {"processed": True, "user_id": message.user_id}
+    
+    # Test with in-memory broker
+    async with TestApp(app):
+        result = await app.publish(
+            "user-events",
+            UserEvent(user_id=123, name="John")
+        )
+        
+        assert result["processed"] is True
+        assert result["user_id"] == 123
+```
+
+### Mock Broker Testing
+
+```python
+from faststream.testing import TestBroker
+
+@pytest.mark.asyncio
+async def test_with_mock_broker():
+    # Create mock broker
+    broker = TestBroker()
+    app = FastStream("test-service", broker=broker)
+    
+    @app.subscribe("user-events")
+    async def handle_user_event(message: UserEvent):
+        return {"status": "processed"}
+    
+    # Test publishing
+    result = await app.publish(
+        "user-events",
+        UserEvent(user_id=123, name="John")
+    )
+    
+    assert result["status"] == "processed"
+    
+    # Verify message was published
+    published_messages = broker.published_messages
+    assert len(published_messages) == 1
+    assert published_messages[0]["topic"] == "user-events"
+```
+
+### Integration Testing
+
+```python
+import asyncio
+from faststream.kafka import KafkaBroker
+
+@pytest.mark.asyncio
+async def test_kafka_integration():
+    # Use real Kafka for integration testing
+    broker = KafkaBroker("localhost:9092")
+    app = FastStream("integration-test", broker=broker)
+    
+    @app.subscribe("test-topic")
+    async def handle_test_message(message: UserEvent):
+        return {"received": True, "user_id": message.user_id}
+    
+    async with app:
+        # Publish test message
+        result = await app.publish(
+            "test-topic",
+            UserEvent(user_id=456, name="Jane")
+        )
+        
+        # Wait for processing
+        await asyncio.sleep(1)
+        
+        assert result["received"] is True
+        assert result["user_id"] == 456
+```
+
+### Test Fixtures
+
+```python
+import pytest
+from faststream import FastStream
+
+@pytest.fixture
+def faststream_app():
+    app = FastStream("test-app")
+    return app
+
+@pytest.fixture
+def user_event():
+    return UserEvent(user_id=789, name="Alice")
+
+@pytest.mark.asyncio
+async def test_with_fixtures(faststream_app, user_event):
+    @faststream_app.subscribe("user-events")
+    async def handle_user_event(message: UserEvent):
+        return {"processed": True, "name": message.name}
+    
+    async with TestApp(faststream_app):
+        result = await faststream_app.publish("user-events", user_event)
+        
+        assert result["processed"] is True
+        assert result["name"] == "Alice"
+```
+
+## Observability
+
+### OpenTelemetry Integration
+
+FastStream supports OpenTelemetry for comprehensive observability:
+
+```python
+from faststream import FastStream
+from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+# Configure OpenTelemetry
+trace.set_tracer_provider(TracerProvider())
+jaeger_exporter = JaegerExporter(
+    agent_host_name="localhost",
+    agent_port=6831,
+)
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(jaeger_exporter)
+)
+
+tracer = trace.get_tracer(__name__)
+
+app = FastStream("observable-service")
+
+@app.subscribe("user-events")
+async def handle_with_tracing(message: UserEvent):
+    with tracer.start_as_current_span("process_user_event") as span:
+        span.set_attribute("user.id", message.user_id)
+        span.set_attribute("user.name", message.name)
+        
+        # Process message
+        result = await process_user_event(message)
+        
+        span.set_attribute("result.status", result["status"])
+        return result
+```
+
+### Health Checks
+
+```python
+from faststream import FastStream
+from faststream.health import HealthCheck
+
+app = FastStream("health-check-service")
+
+# Define health checks
+@app.health_check
+async def database_health():
+    try:
+        # Check database connection
+        await check_database_connection()
+        return {"database": "healthy"}
+    except Exception as e:
+        return {"database": "unhealthy", "error": str(e)}
+
+@app.health_check
+async def broker_health():
+    try:
+        # Check broker connection
+        await check_broker_connection()
+        return {"broker": "healthy"}
+    except Exception as e:
+        return {"broker": "unhealthy", "error": str(e)}
+
+# Health check endpoint
+@app.get("/health")
+async def health_endpoint():
+    checks = await app.run_health_checks()
+    is_healthy = all(check.get("status") == "healthy" for check in checks.values())
+    
+    return {
+        "status": "healthy" if is_healthy else "unhealthy",
+        "checks": checks
+    }
+```
+
+### Metrics Collection
+
+```python
+from faststream import FastStream
+import time
+from collections import defaultdict
+
+class MetricsCollector:
+    def __init__(self):
+        self.message_count = defaultdict(int)
+        self.processing_times = defaultdict(list)
+        self.error_count = defaultdict(int)
+    
+    def record_message(self, topic: str, processing_time: float, success: bool):
+        self.message_count[topic] += 1
+        self.processing_times[topic].append(processing_time)
+        
+        if not success:
+            self.error_count[topic] += 1
+    
+    def get_metrics(self):
+        return {
+            "message_count": dict(self.message_count),
+            "avg_processing_time": {
+                topic: sum(times) / len(times) if times else 0
+                for topic, times in self.processing_times.items()
+            },
+            "error_count": dict(self.error_count)
+        }
+
+metrics = MetricsCollector()
+
+@app.middleware
+async def metrics_middleware(context: Context, call_next):
+    start_time = time.time()
+    
+    try:
+        result = await call_next(context)
+        processing_time = time.time() - start_time
+        
+        metrics.record_message(
+            context.topic,
+            processing_time,
+            success=True
+        )
+        
+        return result
+    except Exception as e:
+        processing_time = time.time() - start_time
+        
+        metrics.record_message(
+            context.topic,
+            processing_time,
+            success=False
+        )
+        
+        raise
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    return metrics.get_metrics()
+```
+
+## Integration Patterns
+
+### FastAPI Integration
+
+FastStream integrates seamlessly with FastAPI:
+
+```python
+from fastapi import FastAPI
+from faststream import FastStream
+from faststream.asgi import FastStreamRouter
+
+# Create FastAPI app
+api_app = FastAPI(title="User Service API")
+
+# Create FastStream app
+stream_app = FastStream("user-stream-service")
+
+# Create router for FastStream
+stream_router = FastStreamRouter(stream_app)
+
+# Include FastStream in FastAPI
+api_app.include_router(stream_router)
+
+# FastAPI endpoints
+@api_app.post("/users")
+async def create_user(user: UserEvent):
+    # Publish to FastStream
+    await stream_app.publish("user-events", user)
+    return {"status": "user_created"}
+
+# FastStream handlers
+@stream_app.subscribe("user-events")
+async def handle_user_event(message: UserEvent):
+    # Process user event
+    return {"status": "processed"}
+
+# Run both applications
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(api_app, host="0.0.0.0", port=8000)
+```
+
+### ASGI Integration
+
+```python
+from faststream.asgi import FastStreamRouter
+from starlette.applications import Starlette
+from starlette.routing import Route
+
+# Create Starlette app
+starlette_app = Starlette()
+
+# Create FastStream app
+stream_app = FastStream("stream-service")
+
+# Create router
+stream_router = FastStreamRouter(stream_app)
+
+# Add routes
+starlette_app.mount("/stream", stream_router)
+
+# FastStream handlers
+@stream_app.subscribe("events")
+async def handle_events(message: dict):
+    return {"status": "processed"}
+```
+
+### Background Tasks
+
+```python
+from faststream import FastStream
+import asyncio
+
+app = FastStream("background-tasks-service")
+
+@app.subscribe("user-events")
+async def handle_user_event(message: UserEvent):
+    # Start background task
+    asyncio.create_task(process_user_background(message))
+    
+    return {"status": "accepted"}
+
+async def process_user_background(user: UserEvent):
+    # Long-running background processing
+    await asyncio.sleep(10)
+    
+    # Publish result
+    await app.publish("user-processed", {
+        "user_id": user.user_id,
+        "status": "completed"
+    })
+```
+
+### Event Sourcing
+
+```python
+from faststream import FastStream
+from typing import List
+import json
+
+class EventStore:
+    def __init__(self):
+        self.events = []
+    
+    async def append(self, event: dict):
+        self.events.append(event)
+    
+    async def get_events(self, aggregate_id: str) -> List[dict]:
+        return [e for e in self.events if e.get("aggregate_id") == aggregate_id]
+
+event_store = EventStore()
+
+app = FastStream("event-sourcing-service")
+
+@app.subscribe("domain-events")
+async def handle_domain_event(message: dict):
+    # Store event
+    await event_store.append(message)
+    
+    # Process event
+    await process_domain_event(message)
+    
+    return {"status": "event_stored"}
+
+async def process_domain_event(event: dict):
+    # Apply event to domain model
+    aggregate_id = event.get("aggregate_id")
+    events = await event_store.get_events(aggregate_id)
+    
+    # Rebuild aggregate state
+    aggregate = rebuild_aggregate(events)
+    
+    # Publish new events if needed
+    if should_publish_new_event(aggregate):
+        await app.publish("domain-events", create_new_event(aggregate))
+```
+
+## Best Practices
+
+### Message Design
+- Use Pydantic models for all messages
+- Include versioning in message schemas
+- Keep messages focused and single-purpose
+- Use descriptive field names and types
+
+### Error Handling
+- Implement comprehensive error handling
+- Use appropriate error types
+- Log errors with context
+- Implement retry mechanisms
+
+### Performance
+- Use async/await for I/O operations
+- Implement connection pooling
+- Monitor message processing times
+- Use appropriate batch sizes
+
+### Security
+- Validate all incoming messages
+- Implement authentication and authorization
+- Use secure broker connections
+- Encrypt sensitive data
+
+### Monitoring
+- Implement health checks
+- Use OpenTelemetry for tracing
+- Monitor message throughput
+- Set up alerting for failures
+description:
+globs:
+alwaysApply: false
+---

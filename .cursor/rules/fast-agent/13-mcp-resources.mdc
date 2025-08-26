@@ -1,0 +1,307 @@
+---
+description: Additional MCP development resources and references
+globs: ["**/*.py", "**/*.md", "**/*.txt"]
+alwaysApply: true
+---
+
+# Resources
+
+Below are some recommended resources for developing with the Model Context Protocol (MCP):
+
+## Core MCP Resources
+
+### Working with Files and Resources
+[Working with Files and Resources](https://llmindset.co.uk/posts/2025/01/mcp-files-resources-part1/)
+
+Examining the options MCP Server and Host developers have for sharing rich content. This comprehensive guide covers:
+
+- File handling in MCP
+- Resource management strategies
+- Best practices for content sharing
+- Performance optimization techniques
+- Security considerations
+
+### PulseMCP Community
+[PulseMCP Community](https://www.pulsemcp.com/)
+
+A community-focused site offering news, up-to-date directories and use-cases of MCP Servers. Features include:
+
+- Latest MCP news and updates
+- Directory of available MCP servers
+- Community discussions and forums
+- Tutorials and guides
+- Server reviews and ratings
+
+## Knowledge Management Tools
+
+### Basic Memory
+[Basic Memory](https://memory.basicmachines.co/docs/introduction)
+
+High quality, markdown based knowledge base for LLMs - also good for Agent development. Key features:
+
+- Markdown-based knowledge organization
+- LLM-optimized content structure
+- Easy integration with MCP servers
+- Version control for knowledge bases
+- Search and retrieval capabilities
+
+### Repomix
+[Repomix](https://repomix.com/guide/)
+
+Create LLM Friendly files from folders or directly from GitHub. Include as an MCP Server - or run from a script prior to create Agent inputs. Capabilities include:
+
+- Repository analysis and processing
+- LLM-optimized file generation
+- GitHub integration
+- Custom processing pipelines
+- Output format customization
+
+## Development Tools and Libraries
+
+### PromptMesh Tools
+[PromptMesh Tools](https://promptmesh.io/)
+
+High quality tools and libraries at the cutting edge of MCP development. Offers:
+
+- Advanced MCP development tools
+- Testing and validation frameworks
+- Performance monitoring
+- Debugging utilities
+- Integration helpers
+
+### mcp-hfspace
+[mcp-hfspace](https://github.com/evalstate/mcp-hfspace)
+
+Seamlessly connect to hundreds of Open Source models including Image and Audio generators and more. Features:
+
+- Hugging Face model integration
+- Image generation capabilities
+- Audio processing tools
+- Model management utilities
+- Performance optimization
+
+### wong2 mcp-cli
+[wong2 mcp-cli](https://github.com/wong2/mcp-cli)
+
+A fast, lightweight, command line alternative to the official MCP Inspector. Provides:
+
+- Command-line MCP client
+- Scriptable interactions
+- Batch processing capabilities
+- Custom tool development
+- Performance monitoring
+
+## Additional Resources
+
+### Official MCP Documentation
+- [MCP Specification](https://modelcontextprotocol.io/specification/2025-06-18/)
+- [MCP GitHub Repository](https://github.com/modelcontextprotocol/specification)
+- [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector)
+
+### Community Resources
+- [MCP Discord](https://discord.gg/modelcontextprotocol)
+- [MCP Reddit](https://www.reddit.com/r/ModelContextProtocol/)
+- [MCP Twitter](https://twitter.com/mcp_ai)
+
+### Development Guides
+- [Building MCP Servers](https://modelcontextprotocol.io/docs/servers/)
+- [MCP Client Development](https://modelcontextprotocol.io/docs/clients/)
+- [MCP Best Practices](https://modelcontextprotocol.io/docs/best-practices/)
+
+## Tool Categories
+
+### File and Resource Management
+
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| Basic Memory | Knowledge base management | Organizing and retrieving information |
+| Repomix | Repository processing | Converting codebases to LLM-friendly formats |
+| Working with Files and Resources | File handling guide | Understanding MCP file operations |
+
+### Development and Testing
+
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| PromptMesh Tools | Development utilities | Building and testing MCP applications |
+| wong2 mcp-cli | Command-line client | Scripting and automation |
+| MCP Inspector | GUI client | Interactive testing and debugging |
+
+### Model Integration
+
+| Tool | Purpose | Use Case |
+|------|---------|----------|
+| mcp-hfspace | Hugging Face integration | Accessing open-source models |
+| PulseMCP Community | Server directory | Finding and evaluating MCP servers |
+
+## Getting Started with Resources
+
+### Setting Up Basic Memory
+
+```bash
+# Install Basic Memory
+pip install basic-memory
+
+# Initialize a knowledge base
+basic-memory init my-knowledge-base
+
+# Add content
+basic-memory add "MCP is a protocol for connecting AI applications to external data sources"
+
+# Query the knowledge base
+basic-memory query "What is MCP?"
+```
+
+### Using Repomix
+
+```bash
+# Install Repomix
+npm install -g repomix
+
+# Process a GitHub repository
+repomix process https://github.com/user/repo
+
+# Process a local directory
+repomix process ./my-project
+
+# Generate LLM-friendly output
+repomix generate --format markdown --output ./llm-files
+```
+
+### Working with mcp-hfspace
+
+```python
+# Install mcp-hfspace
+pip install mcp-hfspace
+
+# Connect to Hugging Face models
+from mcp_hfspace import HFSpaceClient
+
+client = HFSpaceClient()
+models = client.list_models()
+
+# Use a specific model
+response = client.generate_text(
+    model="gpt2",
+    prompt="Hello, world!"
+)
+```
+
+### Using wong2 mcp-cli
+
+```bash
+# Install wong2 mcp-cli
+npm install -g @wong2/mcp-cli
+
+# Connect to an MCP server
+mcp connect http://localhost:8000/mcp
+
+# List available tools
+mcp tools
+
+# Call a tool
+mcp call search_web --query "MCP protocol"
+
+# Run a script
+mcp script my-script.js
+```
+
+## Best Practices
+
+### Resource Management
+
+1. **Organize your resources** - Use consistent naming and structure
+2. **Version control** - Track changes to important resources
+3. **Documentation** - Maintain clear documentation for custom resources
+4. **Performance monitoring** - Track resource usage and optimize as needed
+
+### Integration
+
+1. **Start simple** - Begin with basic tools and gradually add complexity
+2. **Test thoroughly** - Validate all integrations before production use
+3. **Error handling** - Implement robust error handling for external resources
+4. **Fallback strategies** - Have backup options when resources are unavailable
+
+### Security
+
+1. **Validate inputs** - Check all external resource inputs
+2. **Access control** - Implement proper authentication and authorization
+3. **Data privacy** - Ensure sensitive data is handled appropriately
+4. **Audit trails** - Log resource access and usage
+
+## Contributing to Resources
+
+### Community Contributions
+
+- **Share your tools** - Contribute useful MCP tools to the community
+- **Document your work** - Provide clear documentation for your contributions
+- **Follow standards** - Adhere to MCP specifications and best practices
+- **Test thoroughly** - Ensure your tools work reliably
+
+### Resource Development
+
+```python
+# Example: Creating a custom MCP resource
+from mcp.types import Resource
+from pathlib import Path
+
+class CustomResource:
+    def __init__(self, path: Path):
+        self.path = path
+        self.mime_type = self._detect_mime_type()
+    
+    def to_mcp_resource(self) -> Resource:
+        return Resource(
+            uri=f"file://{self.path.absolute()}",
+            mimeType=self.mime_type
+        )
+    
+    def _detect_mime_type(self) -> str:
+        # Implement MIME type detection
+        pass
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Resource Not Found
+```bash
+# Check if resource exists
+ls -la /path/to/resource
+
+# Verify permissions
+chmod +r /path/to/resource
+
+# Check MCP server configuration
+cat fastagent.config.yaml
+```
+
+#### Performance Issues
+```python
+# Monitor resource usage
+import time
+import psutil
+
+start_time = time.time()
+# Use resource
+end_time = time.time()
+
+print(f"Resource usage time: {end_time - start_time}s")
+print(f"Memory usage: {psutil.virtual_memory().percent}%")
+```
+
+#### Integration Problems
+```bash
+# Test MCP server connectivity
+curl http://localhost:8000/mcp
+
+# Check server logs
+tail -f server.log
+
+# Validate configuration
+fast-agent check --servers
+```
+
+---
+
+*Source: [https://fast-agent.ai/mcp/resources/](https://fast-agent.ai/mcp/resources/)*

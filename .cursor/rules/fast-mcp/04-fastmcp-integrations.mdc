@@ -1,0 +1,718 @@
+# FastMCP Integrations
+
+FastMCP provides comprehensive integrations with AI platforms, web frameworks, authentication providers, and deployment options. This guide covers integrating FastMCP into various ecosystems.
+
+## AI Platform Integrations
+
+### ChatGPT Integration
+
+Integrate FastMCP servers with ChatGPT:
+
+```python
+# Server configuration for ChatGPT
+from fastmcp import FastMCP
+
+mcp = FastMCP("ChatGPT Integration Server")
+
+@mcp.tool
+def search_web(query: str) -> str:
+    """Search the web for information"""
+    # Implementation here
+    return f"Search results for: {query}"
+
+if __name__ == "__main__":
+    # Run as HTTP server for ChatGPT
+    mcp.run(transport="http", port=8000)
+```
+
+**ChatGPT Configuration:**
+```json
+{
+  "mcpServers": {
+    "fastmcp-server": {
+      "command": "python",
+      "args": ["server.py"],
+      "env": {
+        "FASTMCP_TRANSPORT": "http",
+        "FASTMCP_PORT": "8000"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop Integration
+
+Integrate with Claude Desktop:
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("Claude Desktop Server")
+
+@mcp.tool
+def analyze_code(code: str, language: str) -> str:
+    """Analyze code for best practices and potential issues"""
+    # Implementation here
+    return f"Analysis for {language} code"
+
+if __name__ == "__main__":
+    # Run as STDIO server for Claude Desktop
+    mcp.run()
+```
+
+**Claude Desktop Configuration:**
+```json
+{
+  "mcpServers": {
+    "fastmcp-server": {
+      "command": "python",
+      "args": ["server.py"]
+    }
+  }
+}
+```
+
+### Cursor Integration
+
+Integrate with Cursor IDE:
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("Cursor Integration Server")
+
+@mcp.tool
+def generate_code(prompt: str, language: str) -> str:
+    """Generate code based on a prompt"""
+    # Implementation here
+    return f"Generated {language} code"
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+**Cursor Configuration:**
+```json
+{
+  "mcpServers": {
+    "fastmcp-server": {
+      "command": "python",
+      "args": ["server.py"]
+    }
+  }
+}
+```
+
+### Anthropic Claude Integration
+
+Integrate with Anthropic's Claude API:
+
+```python
+from fastmcp import FastMCP
+import anthropic
+
+mcp = FastMCP("Claude API Server")
+
+@mcp.tool
+def claude_analysis(text: str) -> str:
+    """Analyze text using Claude API"""
+    client = anthropic.Anthropic(api_key="your-api-key")
+    
+    message = client.messages.create(
+        model="claude-3-sonnet-20240229",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": f"Analyze this text: {text}"}]
+    )
+    
+    return message.content[0].text
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Google Gemini Integration
+
+Integrate with Google Gemini:
+
+```python
+from fastmcp import FastMCP
+import google.generativeai as genai
+
+mcp = FastMCP("Gemini Integration Server")
+
+@mcp.tool
+def gemini_generate(prompt: str) -> str:
+    """Generate content using Gemini"""
+    genai.configure(api_key="your-api-key")
+    model = genai.GenerativeModel('gemini-pro')
+    
+    response = model.generate_content(prompt)
+    return response.text
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### OpenAI Integration
+
+Integrate with OpenAI's GPT models:
+
+```python
+from fastmcp import FastMCP
+import openai
+
+mcp = FastMCP("OpenAI Integration Server")
+
+@mcp.tool
+def gpt_analysis(text: str, model: str = "gpt-4") -> str:
+    """Analyze text using OpenAI GPT"""
+    client = openai.OpenAI(api_key="your-api-key")
+    
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": f"Analyze this text: {text}"}]
+    )
+    
+    return response.choices[0].message.content
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Web Framework Integrations
+
+### FastAPI Integration
+
+Integrate FastMCP with FastAPI applications:
+
+```python
+from fastapi import FastAPI, HTTPException
+from fastmcp import FastMCP, Client
+import asyncio
+
+app = FastAPI()
+mcp_server = FastMCP("FastAPI Integration Server")
+
+@mcp_server.tool
+def process_data(data: dict) -> dict:
+    """Process data through the MCP server"""
+    # Implementation here
+    return {"processed": True, "data": data}
+
+@app.post("/process")
+async def process_endpoint(data: dict):
+    """FastAPI endpoint that uses MCP server"""
+    try:
+        # Use the MCP server directly
+        result = mcp_server.call_tool("process_data", data)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/external-mcp")
+async def external_mcp_endpoint(data: dict):
+    """Connect to external MCP server"""
+    async with Client("external_server.py") as client:
+        result = await client.call_tool("external_process", data)
+        return {"result": result.data}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+### ASGI Integration
+
+Integrate with ASGI applications:
+
+```python
+from fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.responses import JSONResponse
+
+mcp = FastMCP("ASGI Integration Server")
+
+@mcp.tool
+def asgi_process(data: dict) -> dict:
+    """Process data in ASGI context"""
+    return {"processed": True, "data": data}
+
+async def process_route(request):
+    """ASGI route handler"""
+    data = await request.json()
+    result = mcp.call_tool("asgi_process", data)
+    return JSONResponse(result)
+
+app = Starlette(routes=[
+    Route("/process", process_route, methods=["POST"])
+])
+```
+
+### OpenAPI Integration
+
+Transform REST APIs into MCP servers:
+
+```python
+from fastmcp import FastMCPOpenAPI
+
+# Create MCP server from OpenAPI specification
+mcp = FastMCPOpenAPI(
+    "API Integration Server",
+    openapi_url="https://api.example.com/openapi.json",
+    base_url="https://api.example.com"
+)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Authentication Provider Integrations
+
+### AuthKit Integration
+
+Integrate with AuthKit for authentication:
+
+```python
+from fastmcp import FastMCP, AuthKitProvider
+
+# Configure AuthKit integration
+auth_provider = AuthKitProvider(
+    authkit_url="https://your-authkit-instance.com",
+    client_id="your-client-id",
+    client_secret="your-client-secret"
+)
+
+mcp = FastMCP("AuthKit Integration Server", auth_provider=auth_provider)
+
+@mcp.tool
+def protected_operation(data: dict) -> dict:
+    """Protected operation requiring authentication"""
+    return {"result": "authenticated operation"}
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Azure Integration
+
+Integrate with Azure services:
+
+```python
+from fastmcp import FastMCP, AzureAuthProvider
+
+# Azure authentication
+auth_provider = AzureAuthProvider(
+    tenant_id="your-tenant-id",
+    client_id="your-client-id",
+    client_secret="your-client-secret"
+)
+
+mcp = FastMCP("Azure Integration Server", auth_provider=auth_provider)
+
+@mcp.tool
+def azure_blob_operation(container: str, blob: str) -> str:
+    """Operate on Azure Blob Storage"""
+    # Azure Blob Storage implementation
+    return f"Processed blob {blob} in container {container}"
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### GitHub OAuth Integration
+
+Integrate with GitHub OAuth:
+
+```python
+from fastmcp import FastMCP, GitHubOAuthProvider
+
+# GitHub OAuth integration
+auth_provider = GitHubOAuthProvider(
+    client_id="your-github-client-id",
+    client_secret="your-github-client-secret",
+    redirect_uri="http://localhost:8000/callback"
+)
+
+mcp = FastMCP("GitHub Integration Server", auth_provider=auth_provider)
+
+@mcp.tool
+def github_operation(repo: str, action: str) -> dict:
+    """Perform GitHub operations"""
+    # GitHub API implementation
+    return {"repository": repo, "action": action, "status": "completed"}
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Google OAuth Integration
+
+Integrate with Google OAuth:
+
+```python
+from fastmcp import FastMCP, GoogleOAuthProvider
+
+# Google OAuth integration
+auth_provider = GoogleOAuthProvider(
+    client_id="your-google-client-id",
+    client_secret="your-google-client-secret",
+    redirect_uri="http://localhost:8000/callback"
+)
+
+mcp = FastMCP("Google Integration Server", auth_provider=auth_provider)
+
+@mcp.tool
+def google_drive_operation(file_id: str, action: str) -> dict:
+    """Operate on Google Drive"""
+    # Google Drive API implementation
+    return {"file_id": file_id, "action": action, "status": "completed"}
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### WorkOS OAuth Integration
+
+Integrate with WorkOS for enterprise authentication:
+
+```python
+from fastmcp import FastMCP, WorkOSOAuthProvider
+
+# WorkOS OAuth integration
+auth_provider = WorkOSOAuthProvider(
+    client_id="your-workos-client-id",
+    client_secret="your-workos-client-secret",
+    organization="your-organization-id"
+)
+
+mcp = FastMCP("WorkOS Integration Server", auth_provider=auth_provider)
+
+@mcp.tool
+def enterprise_operation(user_id: str, operation: str) -> dict:
+    """Perform enterprise operations"""
+    # Enterprise operation implementation
+    return {"user_id": user_id, "operation": operation, "status": "completed"}
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Deployment Options
+
+### FastMCP Cloud Deployment
+
+Deploy to FastMCP Cloud:
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("Cloud Deployment Server")
+
+@mcp.tool
+def cloud_operation(data: dict) -> dict:
+    """Cloud-based operation"""
+    return {"cloud_processed": True, "data": data}
+
+if __name__ == "__main__":
+    # Deploy to FastMCP Cloud
+    mcp.run(cloud_deploy=True)
+```
+
+### Docker Deployment
+
+Deploy using Docker:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install FastMCP
+RUN pip install fastmcp
+
+# Copy server code
+COPY server.py .
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install -r requirements.txt
+
+# Expose port
+EXPOSE 8000
+
+# Run the server
+CMD ["python", "server.py"]
+```
+
+**Docker Compose:**
+```yaml
+version: '3.8'
+services:
+  fastmcp-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MCP_SERVER_URL=http://localhost:8000/mcp
+    volumes:
+      - ./data:/app/data
+```
+
+### Kubernetes Deployment
+
+Deploy to Kubernetes:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastmcp-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fastmcp-server
+  template:
+    metadata:
+      labels:
+        app: fastmcp-server
+    spec:
+      containers:
+      - name: fastmcp-server
+        image: your-registry/fastmcp-server:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MCP_SERVER_URL
+          value: "http://fastmcp-server:8000/mcp"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastmcp-server
+spec:
+  selector:
+    app: fastmcp-server
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer
+```
+
+## Integration Patterns
+
+### REST API Transformation
+
+Transform REST APIs into MCP servers:
+
+```python
+from fastmcp import FastMCPOpenAPI
+
+# Transform REST API to MCP
+mcp = FastMCPOpenAPI(
+    "REST API Server",
+    openapi_url="https://api.example.com/openapi.json",
+    base_url="https://api.example.com",
+    transform_options={
+        "prefix_tools": True,
+        "include_resources": True,
+        "custom_headers": {
+            "Authorization": "Bearer your-token"
+        }
+    }
+)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Tool Transformation
+
+Transform existing tools:
+
+```python
+from fastmcp import FastMCP, ToolTransformer
+
+mcp = FastMCP("Tool Transformation Server")
+
+# Original tool
+@mcp.tool
+def original_tool(data: dict) -> dict:
+    """Original tool implementation"""
+    return {"original": True, "data": data}
+
+# Transform the tool
+transformer = ToolTransformer(mcp)
+
+@transformer.transform("original_tool")
+def transformed_tool(data: dict) -> dict:
+    """Transformed tool with additional processing"""
+    # Pre-processing
+    processed_data = preprocess(data)
+    
+    # Call original tool
+    result = original_tool(processed_data)
+    
+    # Post-processing
+    return postprocess(result)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Method Decorator Pattern
+
+Use decorators for integration:
+
+```python
+from fastmcp import FastMCP
+from functools import wraps
+
+mcp = FastMCP("Decorator Pattern Server")
+
+def mcp_integration(func):
+    """Decorator to integrate functions with MCP"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Pre-processing
+        print(f"Calling {func.__name__}")
+        
+        # Call original function
+        result = func(*args, **kwargs)
+        
+        # Post-processing
+        print(f"Completed {func.__name__}")
+        
+        return result
+    
+    # Register as MCP tool
+    mcp.add_tool(wrapper)
+    return wrapper
+
+@mcp_integration
+def business_logic(data: dict) -> dict:
+    """Business logic function"""
+    return {"processed": True, "data": data}
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Best Practices
+
+### Integration Design
+
+1. **Use appropriate authentication** for each platform
+2. **Implement proper error handling** for external services
+3. **Cache responses** when appropriate
+4. **Monitor performance** and usage patterns
+5. **Use secure transports** (HTTPS, WSS)
+
+### Security
+
+1. **Validate all inputs** before processing
+2. **Use environment variables** for sensitive configuration
+3. **Implement rate limiting** for external APIs
+4. **Monitor for suspicious activity**
+5. **Use proper authentication** and authorization
+
+### Performance
+
+1. **Use connection pooling** for external services
+2. **Implement caching** for frequently accessed data
+3. **Use async operations** for I/O-bound tasks
+4. **Monitor response times** and optimize
+5. **Use appropriate timeouts** for external calls
+
+### Testing
+
+1. **Mock external services** in unit tests
+2. **Test integration points** thoroughly
+3. **Use integration tests** for end-to-end validation
+4. **Monitor test coverage** for integration code
+5. **Test error scenarios** and edge cases
+
+## Configuration Management
+
+### Environment-Based Configuration
+
+```python
+import os
+from fastmcp import FastMCP
+
+def create_integration_server():
+    """Create server based on environment"""
+    environment = os.getenv("ENVIRONMENT", "development")
+    
+    if environment == "production":
+        # Production configuration
+        auth_provider = WorkOSOAuthProvider(
+            client_id=os.getenv("WORKOS_CLIENT_ID"),
+            client_secret=os.getenv("WORKOS_CLIENT_SECRET")
+        )
+        mcp = FastMCP("Production Server", auth_provider=auth_provider)
+    else:
+        # Development configuration
+        mcp = FastMCP("Development Server")
+    
+    return mcp
+
+# Use the server
+mcp = create_integration_server()
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Configuration Files
+
+```yaml
+# config.yaml
+integrations:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4"
+  
+  github:
+    client_id: "${GITHUB_CLIENT_ID}"
+    client_secret: "${GITHUB_CLIENT_SECRET}"
+  
+  azure:
+    tenant_id: "${AZURE_TENANT_ID}"
+    client_id: "${AZURE_CLIENT_ID}"
+    client_secret: "${AZURE_CLIENT_SECRET}"
+
+deployment:
+  environment: "production"
+  port: 8000
+  host: "0.0.0.0"
+```
+
+```python
+import yaml
+from fastmcp import FastMCP
+
+# Load configuration
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+# Create server with configuration
+mcp = FastMCP("Configured Server")
+
+# Add integrations based on config
+if "openai" in config["integrations"]:
+    # Add OpenAI integration
+    pass
+
+if "github" in config["integrations"]:
+    # Add GitHub integration
+    pass
+
+if __name__ == "__main__":
+    mcp.run(
+        port=config["deployment"]["port"],
+        host=config["deployment"]["host"]
+    )
+```

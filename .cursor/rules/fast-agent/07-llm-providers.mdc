@@ -1,0 +1,333 @@
+---
+description: Configuration for all supported LLM providers (Anthropic, OpenAI, Azure, DeepSeek, etc.)
+globs: ["**/*.yaml", "**/*.yml", "**/*.py"]
+alwaysApply: true
+---
+
+# LLM Providers
+
+For each model provider, you can configure parameters either through environment variables or in your `fastagent.config.yaml` file.
+
+Be sure to run `fast-agent check` to troubleshoot API Key issues.
+
+## Common Configuration Format
+
+In your `fastagent.config.yaml`:
+
+```yaml
+<provider>:
+  api_key: "your_api_key"  # Override with API_KEY env var
+  base_url: "https://api.example.com"  # Base URL for API calls
+```
+
+## Anthropic
+
+Anthropic models support Text, Vision and PDF content.
+
+**YAML Configuration:**
+```yaml
+anthropic:
+  api_key: "your_anthropic_key"  # Required
+  base_url: "https://api.anthropic.com/v1"  # Default, only include if required
+```
+
+**Environment Variables:**
+- `ANTHROPIC_API_KEY`: Your Anthropic API key
+- `ANTHROPIC_BASE_URL`: Override the API endpoint
+
+**Model Name Aliases:**
+
+| Model Alias | Maps to |
+|-------------|---------|
+| claude | claude-sonnet-4-0 |
+| sonnet | claude-sonnet-4-0 |
+| sonnet35 | claude-3-5-sonnet-latest |
+| sonnet37 | claude-3-7-sonnet-latest |
+| opus | claude-opus-4-1 |
+| opus3 | claude-3-opus-latest |
+| haiku | claude-3-5-haiku-latest |
+| haiku3 | claude-3-haiku-20240307 |
+| haiku35 | claude-3-5-haiku-latest |
+
+## OpenAI
+
+**fast-agent** supports OpenAI `gpt-5` series, `gpt-4.1` series, `o1-preview`, `o1` and `o3-mini` models. Arbitrary model names are supported with `openai.<model_name>`. Supported modalities are model-dependent, check the [OpenAI Models Page](https://platform.openai.com/docs/models) for the latest information.
+
+For reasoning models, you can specify `low`, `medium`, or `high` effort as follows:
+
+```bash
+fast-agent --model o3-mini.medium
+fast-agent --model gpt-5.high
+```
+
+`gpt-5` also supports a `minimal` reasoning effort.
+
+Structured outputs use the OpenAI API Structured Outputs feature.
+
+**YAML Configuration:**
+```yaml
+openai:
+  api_key: "your_openai_key"  # Default
+  base_url: "https://api.openai.com/v1"  # Default, only include if required
+```
+
+**Environment Variables:**
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `OPENAI_BASE_URL`: Override the API endpoint
+
+**Model Name Aliases:**
+
+| Model Alias | Maps to | Model Alias | Maps to |
+|-------------|---------|-------------|---------|
+| gpt-4o | gpt-4o | gpt-4.1 | gpt-4.1 |
+| gpt-4o-mini | gpt-4o-mini | gpt-4.1-mini | gpt-4.1-mini |
+| o1 | o1 | gpt-4.1-nano | gpt-4.1-nano |
+| o1-mini | o1-mini | o1-preview | o1-preview |
+| o3-mini | o3-mini | o3 | |
+| gpt-5 | gpt-5 | gpt-5-mini | gpt-5-mini |
+| gpt-5-nano | gpt-5-nano | | |
+
+## Azure OpenAI
+
+### ⚠️ Check Model and Feature Availability by Region
+
+Before deploying an LLM model in Azure, **always check the official Azure documentation to verify that the required model and capabilities (vision, audio, etc.) are available in your region**. Availability varies by region and by feature.
+
+**Key Capabilities and Official Documentation:**
+
+- **GPT-4o and GPT-4o-mini**: [Azure OpenAI Service models](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4o-and-gpt-4o-mini)
+- **GPT-4 Turbo with Vision**: [GPT-4 Turbo with Vision](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4-turbo-with-vision)
+- **GPT-4 Turbo**: [GPT-4 Turbo](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-4-turbo)
+- **GPT-3.5 Turbo**: [GPT-3.5 Turbo](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#gpt-35-turbo)
+
+**YAML Configuration:**
+```yaml
+# Option 1: Using resource_name and api_key (standard method)
+azure:
+  api_key: "your_azure_openai_key"  # Required unless using DefaultAzureCredential
+  resource_name: "your-resource-name"  # Resource name in Azure
+  azure_deployment: "deployment-name"  # Required - deployment name from Azure
+  api_version: "2023-05-15"  # Optional API version
+  # Do NOT include base_url if you use resource_name
+
+# Option 2: Using base_url and api_key (custom endpoints or sovereign clouds)
+# azure:
+#   api_key: "your_azure_openai_key"
+#   base_url: "https://your-endpoint.openai.azure.com/"
+#   azure_deployment: "deployment-name"
+#   api_version: "2023-05-15"
+#   # Do NOT include resource_name if you use base_url
+
+# Option 3: Using DefaultAzureCredential (for managed identity, Azure CLI, etc.)
+# azure:
+#   use_default_azure_credential: true
+#   base_url: "https://your-endpoint.openai.azure.com/"
+#   azure_deployment: "deployment-name"
+#   api_version: "2023-05-15"
+#   # Do NOT include api_key or resource_name in this mode
+```
+
+**Environment Variables:**
+- `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
+- `AZURE_OPENAI_RESOURCE_NAME`: Your Azure resource name
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Your deployment name
+- `AZURE_OPENAI_API_VERSION`: API version
+
+**Important Configuration Notes:**
+- Use either `resource_name` or `base_url`, not both.
+- When using `DefaultAzureCredential`, do NOT include `api_key` or `resource_name` (the `azure-identity` package must be installed).
+- When using `base_url`, do NOT include `resource_name`.
+- When using `resource_name`, do NOT include `base_url`.
+- The model string format is `azure.deployment-name`
+
+## DeepSeek
+
+**YAML Configuration:**
+```yaml
+deepseek:
+  api_key: "your_deepseek_key"  # Can also use DEEPSEEK_API_KEY env var
+  base_url: "https://api.deepseek.com/v1"  # Optional, only include if required
+```
+
+**Environment Variables:**
+- `DEEPSEEK_API_KEY`: Your DeepSeek API key
+- `DEEPSEEK_BASE_URL`: Override the API endpoint
+
+## Generic
+
+The generic provider allows you to use any LLM API that follows the OpenAI-compatible format.
+
+**YAML Configuration:**
+```yaml
+generic:
+  api_key: "your_api_key"  # Can also use GENERIC_API_KEY env var
+  base_url: "https://your-api-endpoint.com/v1"  # Required
+  model_name: "your-model-name"  # Optional, can be overridden in model string
+```
+
+**Environment Variables:**
+- `GENERIC_API_KEY`: Your API key
+- `GENERIC_BASE_URL`: Your API endpoint
+- `GENERIC_MODEL_NAME`: Default model name
+
+**Usage:**
+```python
+@fast.agent(
+    name="generic_agent",
+    model="generic.your-model-name"  # or just "generic" if model_name is set in config
+)
+```
+
+## OpenRouter
+
+OpenRouter provides access to multiple LLM providers through a single API.
+
+**YAML Configuration:**
+```yaml
+openrouter:
+  api_key: "your_openrouter_key"  # Can also use OPENROUTER_API_KEY env var
+  base_url: "https://openrouter.ai/api/v1"  # Default, only include if required
+```
+
+**Environment Variables:**
+- `OPENROUTER_API_KEY`: Your OpenRouter API key
+- `OPENROUTER_BASE_URL`: Override the API endpoint
+
+**Model Format:**
+```
+openrouter.provider/model_name:route
+```
+
+**Examples:**
+- `openrouter.google/gemini-2.5-pro-exp-03-25:free`
+- `openrouter.anthropic/claude-3-5-sonnet:free`
+- `openrouter.openai/gpt-4o:free`
+
+## TensorZero
+
+TensorZero provides serverless functions for LLM inference.
+
+**YAML Configuration:**
+```yaml
+tensorzero:
+  api_key: "your_tensorzero_key"  # Can also use TENSORZERO_API_KEY env var
+  base_url: "https://api.tensorzero.ai"  # Default, only include if required
+```
+
+**Environment Variables:**
+- `TENSORZERO_API_KEY`: Your TensorZero API key
+- `TENSORZERO_BASE_URL`: Override the API endpoint
+
+**Model Format:**
+```
+tensorzero.function_name
+```
+
+## Ollama
+
+Ollama allows you to run local models.
+
+**YAML Configuration:**
+```yaml
+ollama:
+  base_url: "http://localhost:11434"  # Default Ollama endpoint
+  model_name: "llama3.2:latest"  # Default model
+```
+
+**Environment Variables:**
+- `OLLAMA_BASE_URL`: Ollama server URL
+- `OLLAMA_MODEL_NAME`: Default model name
+
+**Usage:**
+```python
+@fast.agent(
+    name="local_agent",
+    model="ollama.llama3.2:latest"
+)
+```
+
+## Configuration Best Practices
+
+### Security
+
+1. **Use environment variables** for API keys in production
+2. **Never commit API keys** to version control
+3. **Use separate keys** for different environments
+4. **Rotate keys regularly**
+
+### Organization
+
+```yaml
+# fastagent.config.yaml
+default_model: "openai.gpt-4o"
+
+# Development environment
+openai:
+  api_key: "${OPENAI_API_KEY}"
+  base_url: "https://api.openai.com/v1"
+
+# Production environment (use secrets file)
+# openai:
+#   api_key: "${PROD_OPENAI_API_KEY}"
+#   base_url: "https://api.openai.com/v1"
+```
+
+### Environment-Specific Configuration
+
+```yaml
+# fastagent.secrets.yaml (not committed to version control)
+openai:
+  api_key: "sk-..."  # Production API key
+
+anthropic:
+  api_key: "sk-ant-..."  # Production API key
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **API Key Errors**
+   ```bash
+   fast-agent check
+   ```
+
+2. **Model Not Found**
+   - Check model name spelling
+   - Verify model availability in your region
+   - Check provider documentation
+
+3. **Rate Limiting**
+   - Implement exponential backoff
+   - Use appropriate model sizes
+   - Monitor usage limits
+
+### Debug Mode
+
+Enable debug logging:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "DEBUG"
+  format: "detailed"
+```
+
+### Health Checks
+
+Test your configuration:
+
+```bash
+# Test all providers
+fast-agent check
+
+# Test specific provider
+fast-agent check --provider openai
+
+# Show configuration
+fast-agent check show
+```
+
+---
+
+*Source: [https://fast-agent.ai/models/llm_providers/](https://fast-agent.ai/models/llm_providers/)*

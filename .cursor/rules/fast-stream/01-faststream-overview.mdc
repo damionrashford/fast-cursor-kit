@@ -1,0 +1,400 @@
+# FastStream Overview
+
+FastStream is an effortless event stream integration framework for microservices. It simplifies writing producers and consumers for message queues, handling parsing, networking, and documentation generation.
+
+## Key Features
+
+### Multiple Broker Support
+FastStream provides unified API for multiple message brokers:
+- **Kafka** (AIOKafka & Confluent)
+- **RabbitMQ** 
+- **NATS**
+- **Redis**
+
+### Pydantic Validation
+- Serializes and validates incoming messages
+- Type-safe message handling
+- Automatic data validation
+
+### Automatic Documentation
+- Generates AsyncAPI documentation
+- Interactive API documentation
+- Schema validation
+
+### Intuitive Design
+- Full-typed editor support
+- Decorator-based API
+- Minimal boilerplate code
+
+### Powerful Dependency Injection
+- Built-in dependency injection system
+- Context-aware message processing
+- Flexible middleware support
+
+### Testable Architecture
+- In-memory testing support
+- Mock broker implementations
+- Comprehensive test utilities
+
+### Extensible Framework
+- Custom serialization
+- Middleware support
+- Lifespan hooks
+- Plugin architecture
+
+## Installation
+
+```bash
+# Install FastStream
+pip install faststream
+
+# Install with specific broker support
+pip install faststream[kafka]
+pip install faststream[rabbit]
+pip install faststream[nats]
+pip install faststream[redis]
+
+# Install all broker support
+pip install faststream[all]
+```
+
+## Quick Start
+
+### Basic Consumer
+
+```python
+from faststream import FastStream
+from pydantic import BaseModel
+
+# Define message model
+class UserMessage(BaseModel):
+    user_id: int
+    name: str
+    email: str
+
+# Create FastStream app
+app = FastStream("user-service")
+
+# Define consumer
+@app.subscribe("user-events")
+async def handle_user_event(message: UserMessage):
+    print(f"Received user event: {message.name}")
+    # Process the message
+    return {"status": "processed"}
+
+# Run the application
+if __name__ == "__main__":
+    app.run()
+```
+
+### Basic Publisher
+
+```python
+from faststream import FastStream
+from pydantic import BaseModel
+
+class OrderEvent(BaseModel):
+    order_id: str
+    amount: float
+    customer_id: int
+
+app = FastStream("order-service")
+
+@app.publish("order-events")
+async def publish_order(order: OrderEvent):
+    return order
+
+# Publish a message
+async def create_order():
+    order = OrderEvent(
+        order_id="12345",
+        amount=99.99,
+        customer_id=1
+    )
+    await app.publish("order-events", order)
+```
+
+## Core Concepts
+
+### FastStream Application
+
+The main entry point for FastStream applications:
+
+```python
+from faststream import FastStream
+
+app = FastStream(
+    "my-service",
+    description="My microservice",
+    version="1.0.0"
+)
+```
+
+### Message Models
+
+Define message structure using Pydantic:
+
+```python
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class UserEvent(BaseModel):
+    user_id: int = Field(..., description="User ID")
+    action: str = Field(..., description="Action performed")
+    timestamp: Optional[str] = Field(None, description="Event timestamp")
+    metadata: dict = Field(default_factory=dict)
+```
+
+### Subscriptions
+
+Handle incoming messages:
+
+```python
+@app.subscribe("user-events")
+async def handle_user_event(message: UserEvent):
+    # Process the message
+    print(f"Processing user event: {message}")
+    return {"status": "success"}
+```
+
+### Publishing
+
+Send messages to topics/queues:
+
+```python
+@app.publish("user-events")
+async def publish_user_event(user_event: UserEvent):
+    return user_event
+```
+
+## Broker Configuration
+
+### Kafka Configuration
+
+```python
+from faststream.kafka import KafkaBroker
+
+broker = KafkaBroker("localhost:9092")
+
+app = FastStream("kafka-service", broker=broker)
+```
+
+### RabbitMQ Configuration
+
+```python
+from faststream.rabbit import RabbitBroker
+
+broker = RabbitBroker("amqp://localhost:5672")
+
+app = FastStream("rabbit-service", broker=broker)
+```
+
+### NATS Configuration
+
+```python
+from faststream.nats import NatsBroker
+
+broker = NatsBroker("nats://localhost:4222")
+
+app = FastStream("nats-service", broker=broker)
+```
+
+### Redis Configuration
+
+```python
+from faststream.redis import RedisBroker
+
+broker = RedisBroker("redis://localhost:6379")
+
+app = FastStream("redis-service", broker=broker)
+```
+
+## Advanced Features
+
+### Dependency Injection
+
+```python
+from faststream import Depends
+
+class UserService:
+    def __init__(self):
+        self.users = {}
+    
+    async def get_user(self, user_id: int):
+        return self.users.get(user_id)
+
+@app.subscribe("user-events")
+async def handle_user_event(
+    message: UserEvent,
+    user_service: UserService = Depends()
+):
+    user = await user_service.get_user(message.user_id)
+    # Process with user service
+```
+
+### Middleware
+
+```python
+from faststream import Context
+
+@app.middleware
+async def logging_middleware(context: Context, call_next):
+    print(f"Processing message: {context.message}")
+    result = await call_next(context)
+    print(f"Message processed: {result}")
+    return result
+```
+
+### Error Handling
+
+```python
+from faststream import Context
+
+@app.subscribe("user-events")
+async def handle_user_event(message: UserEvent, context: Context):
+    try:
+        # Process message
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error processing message: {e}")
+        # Handle error appropriately
+        raise
+```
+
+### Lifespan Hooks
+
+```python
+@app.on_startup
+async def startup():
+    print("Application starting up...")
+    # Initialize resources
+
+@app.on_shutdown
+async def shutdown():
+    print("Application shutting down...")
+    # Cleanup resources
+```
+
+## Testing
+
+### In-Memory Testing
+
+```python
+import pytest
+from faststream.testing import TestApp
+
+@pytest.mark.asyncio
+async def test_user_event_handling():
+    app = FastStream("test-service")
+    
+    @app.subscribe("user-events")
+    async def handle_user_event(message: UserEvent):
+        return {"processed": True}
+    
+    async with TestApp(app):
+        result = await app.publish(
+            "user-events",
+            UserEvent(user_id=1, action="created")
+        )
+        assert result["processed"] is True
+```
+
+### Mock Broker Testing
+
+```python
+from faststream.testing import TestBroker
+
+async def test_with_mock_broker():
+    broker = TestBroker()
+    app = FastStream("test-service", broker=broker)
+    
+    # Test your application with mock broker
+```
+
+## Deployment
+
+### Running the Application
+
+```bash
+# Run directly
+python app.py
+
+# Run with uvicorn
+uvicorn app:app --host 0.0.0.0 --port 8000
+
+# Run with FastStream CLI
+faststream run app:app
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+CMD ["python", "app.py"]
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: faststream-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: faststream-app
+  template:
+    metadata:
+      labels:
+        app: faststream-app
+    spec:
+      containers:
+      - name: faststream-app
+        image: faststream-app:latest
+        ports:
+        - containerPort: 8000
+```
+
+## Best Practices
+
+### Message Design
+- Use Pydantic models for all messages
+- Include versioning in message schemas
+- Keep messages focused and single-purpose
+- Use descriptive field names and types
+
+### Error Handling
+- Implement comprehensive error handling
+- Use appropriate error types
+- Log errors with context
+- Implement retry mechanisms
+
+### Performance
+- Use async/await for I/O operations
+- Implement connection pooling
+- Monitor message processing times
+- Use appropriate batch sizes
+
+### Security
+- Validate all incoming messages
+- Implement authentication and authorization
+- Use secure broker connections
+- Encrypt sensitive data
+
+### Monitoring
+- Implement health checks
+- Use OpenTelemetry for tracing
+- Monitor message throughput
+- Set up alerting for failures
+description:
+globs:
+alwaysApply: false
+---

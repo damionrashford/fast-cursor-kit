@@ -1,0 +1,386 @@
+---
+description: Passthrough and playback models for development and testing
+globs: ["**/*.py", "**/*.txt"]
+alwaysApply: true
+---
+
+# Internal Models
+
+**fast-agent** comes with two internal models to aid development and testing: `passthrough` and `playback`.
+
+## Passthrough
+
+By default, the `passthrough` model echos messages sent to it.
+
+### Fixed Responses
+
+By sending a `***FIXED_RESPONSE <message>` message, the model will return `<message>` to any request.
+
+```python
+@fast.agent(
+    name="test_agent",
+    model="passthrough"
+)
+
+# Set a fixed response
+await agent.send("***FIXED_RESPONSE Hello, I am a test agent!")
+
+# Now any message will return the fixed response
+response = await agent.send("What is the weather?")
+print(response)  # Output: "Hello, I am a test agent!"
+```
+
+### Tool Calling
+
+By sending a `***CALL_TOOL <tool_name> [<json>]` message, the model will call the specified MCP Tool, and return a string containing the results.
+
+```python
+@fast.agent(
+    name="tool_test_agent",
+    model="passthrough",
+    servers=["filesystem"]
+)
+
+# Call a tool with specific arguments
+await agent.send("***CALL_TOOL list_files {\"path\": \"./\"}")
+
+# The agent will call the list_files tool and return the results
+response = await agent.send("List the files in the current directory")
+print(response)  # Output: Tool call results
+```
+
+### Advanced Passthrough Features
+
+#### Conditional Responses
+
+You can set up conditional responses based on input patterns:
+
+```python
+@fast.agent(
+    name="conditional_agent",
+    model="passthrough"
+)
+
+# Set up conditional responses
+await agent.send("***FIXED_RESPONSE If the message contains 'hello', respond with 'Hi there!', otherwise respond with 'I received your message.'")
+
+# Test different inputs
+response1 = await agent.send("hello world")  # Output: "Hi there!"
+response2 = await agent.send("goodbye")      # Output: "I received your message."
+```
+
+#### Simulating Tool Calls
+
+You can simulate complex tool call scenarios:
+
+```python
+@fast.agent(
+    name="simulation_agent",
+    model="passthrough",
+    servers=["web_search"]
+)
+
+# Simulate a web search
+await agent.send("***CALL_TOOL search_web {\"query\": \"Python programming\"}")
+
+# The agent will simulate calling the search tool
+response = await agent.send("Search for Python programming tutorials")
+print(response)  # Output: Simulated search results
+```
+
+## Playback
+
+The `playback` model replays the first conversation sent to it. A typical usage may look like this:
+
+```python
+@fast.agent(
+    name="playback_agent",
+    model="playback"
+)
+
+# Set up the conversation to replay
+conversation = """---USER
+Good morning!
+---ASSISTANT
+Hello
+---USER
+Generate some JSON
+---ASSISTANT
+{"city": "London", "temperature": 72}"""
+
+await agent.send(f"***FIXED_RESPONSE {conversation}")
+
+# Now the agent will replay this conversation
+response1 = await agent.send("Good morning!")  # Output: "Hello"
+response2 = await agent.send("Generate some JSON")  # Output: {"city": "London", "temperature": 72}
+```
+
+### Loading Playback from Files
+
+You can load playback conversations from files:
+
+```python
+from mcp_agent.core.utils import load_message_multipart
+from pathlib import Path
+
+@fast.agent(
+    name="file_playback_agent",
+    model="playback"
+)
+
+# Load conversation from file
+playback_messages = load_message_multipart(Path("conversation.txt"))
+
+# Set up the conversation
+assert "HISTORY LOADED" == agent.playback.generate(playback_messages)
+
+# Use the loaded conversation
+response = agent.playback.send("Good morning!")  # Returns "Hello"
+temperature, _ = agent.playback.structured("Generate some JSON")  # Returns structured data
+```
+
+### Playback File Format
+
+The playback file should contain conversation pairs in the format:
+
+```
+---USER
+User message here
+---ASSISTANT
+Assistant response here
+---USER
+Another user message
+---ASSISTANT
+Another assistant response
+```
+
+### Advanced Playback Features
+
+#### Structured Output Playback
+
+You can replay conversations that include structured outputs:
+
+```python
+@fast.agent(
+    name="structured_playback",
+    model="playback"
+)
+
+# Set up conversation with structured output
+conversation = """---USER
+Analyze this data and provide a summary
+---ASSISTANT
+{"summary": "The data shows positive trends", "confidence": 0.95, "key_points": ["Point 1", "Point 2"]}"""
+
+await agent.send(f"***FIXED_RESPONSE {conversation}")
+
+# Get structured response
+from pydantic import BaseModel
+from typing import List
+
+class AnalysisResult(BaseModel):
+    summary: str
+    confidence: float
+    key_points: List[str]
+
+result: AnalysisResult = await agent.structured("Analyze this data and provide a summary", AnalysisResult)
+print(result.summary)  # Output: "The data shows positive trends"
+```
+
+#### Tool Call Playback
+
+You can replay conversations that include tool calls:
+
+```python
+@fast.agent(
+    name="tool_playback",
+    model="playback",
+    servers=["filesystem"]
+)
+
+# Set up conversation with tool calls
+conversation = """---USER
+List the files in the current directory
+---ASSISTANT
+I'll check the files in the current directory for you.
+---TOOL_CALL
+{"name": "list_files", "arguments": {"path": "./"}}
+---TOOL_RESULT
+{"files": ["file1.txt", "file2.py", "README.md"]}
+---ASSISTANT
+Here are the files in the current directory:
+- file1.txt
+- file2.py
+- README.md"""
+
+await agent.send(f"***FIXED_RESPONSE {conversation}")
+
+# Replay the conversation
+response = await agent.send("List the files in the current directory")
+print(response)  # Output: The final assistant response with file list
+```
+
+### Playback Exhaustion
+
+When the `playback` runs out of messages, it returns `MESSAGES EXHAUSTED (list size [a]) ([b] overage)`.
+
+```python
+@fast.agent(
+    name="exhaustion_test",
+    model="playback"
+)
+
+# Set up a short conversation
+conversation = """---USER
+Hello
+---ASSISTANT
+Hi there!"""
+
+await agent.send(f"***FIXED_RESPONSE {conversation}")
+
+# Use the conversation
+response1 = await agent.send("Hello")  # Output: "Hi there!"
+
+# Try to continue beyond the conversation
+response2 = await agent.send("How are you?")  # Output: "MESSAGES EXHAUSTED (list size 1) (1 overage)"
+```
+
+List size is the total number of messages originally loaded, overage is the number of requests made after exhaustion.
+
+## Use Cases
+
+### Development and Testing
+
+#### Unit Testing
+
+```python
+@fast.agent(
+    name="test_agent",
+    model="passthrough"
+)
+
+# Set up predictable responses for testing
+await agent.send("***FIXED_RESPONSE Test response for unit testing")
+
+# Use in your test suite
+def test_agent_response():
+    response = await agent.send("Any input")
+    assert response == "Test response for unit testing"
+```
+
+#### Integration Testing
+
+```python
+@fast.agent(
+    name="integration_test",
+    model="playback"
+)
+
+# Load a recorded conversation for integration testing
+conversation = load_message_multipart(Path("test_conversation.txt"))
+agent.playback.generate(conversation)
+
+# Test the full conversation flow
+responses = []
+for message in test_messages:
+    response = await agent.send(message)
+    responses.append(response)
+
+# Assert expected responses
+assert responses == expected_responses
+```
+
+### Debugging
+
+#### Tool Call Debugging
+
+```python
+@fast.agent(
+    name="debug_agent",
+    model="passthrough",
+    servers=["filesystem", "web_search"]
+)
+
+# Simulate tool calls to debug issues
+await agent.send("***CALL_TOOL list_files {\"path\": \"./\"}")
+
+# Test the tool call
+response = await agent.send("List files")
+print(f"Tool call result: {response}")
+```
+
+#### Conversation Flow Debugging
+
+```python
+@fast.agent(
+    name="flow_debug",
+    model="playback"
+)
+
+# Load a problematic conversation to debug
+problematic_conversation = load_message_multipart(Path("bug_report.txt"))
+agent.playback.generate(problematic_conversation)
+
+# Step through the conversation to identify issues
+for i, message in enumerate(problematic_messages):
+    response = await agent.send(message)
+    print(f"Step {i}: {message} -> {response}")
+```
+
+### Documentation and Examples
+
+#### Creating Examples
+
+```python
+@fast.agent(
+    name="example_agent",
+    model="playback"
+)
+
+# Create a documented example conversation
+example_conversation = """---USER
+What is the Model Context Protocol?
+---ASSISTANT
+The Model Context Protocol (MCP) is a standard for connecting AI applications to external data sources and tools. It enables secure, efficient communication between AI models and various data providers.
+
+Key features of MCP include:
+- Standardized tool calling
+- Resource management
+- Prompt templates
+- Multi-modal support
+
+Would you like me to explain any specific aspect of MCP in more detail?"""
+
+await agent.send(f"***FIXED_RESPONSE {example_conversation}")
+
+# Use this for documentation examples
+response = await agent.send("What is the Model Context Protocol?")
+print(response)  # Output: The detailed explanation
+```
+
+## Best Practices
+
+### Testing
+
+1. **Use passthrough for unit tests** - Predictable, fast responses
+2. **Use playback for integration tests** - Real conversation flows
+3. **Record real conversations** for realistic testing scenarios
+4. **Test edge cases** with custom passthrough responses
+
+### Development
+
+1. **Use internal models during development** - Faster iteration
+2. **Create test conversations** for complex workflows
+3. **Simulate tool calls** to test MCP integration
+4. **Use structured outputs** for testing data processing
+
+### Debugging
+
+1. **Record problematic conversations** for analysis
+2. **Use passthrough to isolate issues** - Remove model variability
+3. **Test tool calls independently** with passthrough
+4. **Create minimal reproduction cases** with playback
+
+---
+
+*Source: [https://fast-agent.ai/models/internal_models/](https://fast-agent.ai/models/internal_models/)*

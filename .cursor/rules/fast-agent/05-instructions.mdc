@@ -1,0 +1,320 @@
+---
+description: Setting system instructions with strings, files, URLs, and template variables
+globs: ["**/*.py", "**/*.md", "**/*.txt"]
+alwaysApply: true
+---
+
+# Instructions
+
+Agents can have their System Instructions set in a number of flexible ways to make building useful agents easier and more maintainable.
+
+When defining an Agent, you can load the instruction as either a `String`, `Path` or `AnyUrl`.
+
+Instructions support embedding the current date, as well as content from other URLs. This is really helpful if you want to refer to files on GitHub, or assemble useful prompts/content in Gists etc.
+
+## Basic String Instructions
+
+The simplest way to set instructions is with a string:
+
+```python
+@fast.agent(
+    name="example",
+    instruction="""You are a helpful AI Agent."""
+)
+```
+
+## Template Variables
+
+Instructions support template variables for dynamic content:
+
+```python
+@fast.agent(
+    name="example",
+    instruction="""You are a helpful AI Agent.
+    Your reliable knowledge cut-off date is December 2024.
+    Today's date is {{currentDate}}."""
+)
+```
+
+Will produce: `You are a helpful AI Agent. Your reliable knowledge cut-off date is December 2024. Today's date is 25 July 2025.`
+
+## URL Content Embedding
+
+You can embed content from URLs directly into your instructions:
+
+```python
+@fast.agent(
+    name="mcp-expert",
+    instruction="""You are have expert knowledge of the MCP (Model Context Protocol) schema.
+    {{url:https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/refs/heads/main/schema/2025-06-18/schema.ts}}
+    Answer any questions about the protocol by referring to and quoting the schema where necessary."""
+)
+```
+
+## File-Based Instructions
+
+You can store the prompt in an external file for easy editing - including template variables:
+
+```python
+from pathlib import Path
+
+@fast.agent(
+    name="mcp-expert",
+    instruction=Path("./mcp-expert.md")
+)
+```
+
+**mcp-expert.md**:
+```markdown
+You are have expert knowledge of the MCP (Model Context Protocol) schema.
+{{url:https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/refs/heads/main/schema/2025-06-18/schema.ts}}
+Answer any questions about the protocol by referring to and quoting the schema where necessary.
+Your knowledge cut-off is December 2024, today's date is {{currentDate}}
+```
+
+## Direct URL Instructions
+
+Or you can load the prompt directly from a URL:
+
+```python
+from pydantic import AnyUrl
+
+@fast.agent(
+    name="mcp-expert",
+    instruction=AnyUrl("https://gist.githubusercontent.com/evalstate/d432921aaaee2c305cf46ae320840360/raw/eb9c7ff93adc780171bfb0ae2560be2178304f16/gistfile1.txt")
+)
+# --> fast-agent system prompt demo
+```
+
+## Command Line Instructions
+
+You can start an agent with instructions from a file using the `fast-agent` command:
+
+```bash
+fast-agent --instructions=mcp-expert.md
+```
+
+This can be combined with other options to specify model and available servers:
+
+```bash
+fast-agent -i mcp-expert.md --model sonnet --url https://hf.co/mcp
+```
+
+Starts an interactive agent session, with the MCP Schema loaded, attached to Sonnet with the Hugging Face MCP Server.
+
+## Multiple Models
+
+You can even specify multiple models to directly compare their outputs:
+
+```bash
+fast-agent -i mcp-expert.md --model sonnet,haiku,gpt-4o
+```
+
+This creates a parallel workflow with three agents using different models, allowing you to compare their responses side by side.
+
+## Template Variable Reference
+
+### Built-in Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{{currentDate}}` | Current date in readable format | "25 July 2025" |
+| `{{currentDate:YYYY-MM-DD}}` | Current date in specific format | "2025-07-25" |
+
+### URL Embedding
+
+| Format | Description | Example |
+|--------|-------------|---------|
+| `{{url:https://example.com/file.txt}}` | Embed content from URL | Embeds the text content |
+| `{{url:https://api.github.com/repos/user/repo/contents/file.md}}` | GitHub file content | Embeds GitHub file content |
+
+### Custom Variables
+
+You can define custom template variables in your configuration:
+
+```yaml
+# fastagent.config.yaml
+template_vars:
+  company_name: "Acme Corp"
+  api_version: "v2.1"
+  support_email: "support@acme.com"
+```
+
+Then use them in your instructions:
+
+```python
+@fast.agent(
+    name="support_agent",
+    instruction="""You are a support agent for {{company_name}}.
+    API Version: {{api_version}}
+    Contact: {{support_email}}
+    Today's date: {{currentDate}}"""
+)
+```
+
+## Advanced Template Features
+
+### Conditional Content
+
+You can use conditional logic in your templates:
+
+```python
+@fast.agent(
+    name="conditional_agent",
+    instruction="""You are an AI assistant.
+    {% if environment == 'production' %}
+    You are in production mode. Be extra careful with responses.
+    {% else %}
+    You are in development mode. You can be more experimental.
+    {% endif %}
+    Today's date: {{currentDate}}"""
+)
+```
+
+### Loops and Iteration
+
+```python
+@fast.agent(
+    name="multi_topic_agent",
+    instruction="""You are an expert in the following topics:
+    {% for topic in topics %}
+    - {{topic}}
+    {% endfor %}
+    Provide detailed answers about these subjects."""
+)
+```
+
+## File Format Support
+
+### Markdown Files
+
+Markdown files are fully supported and rendered appropriately:
+
+```markdown
+# MCP Expert Agent
+
+You are an expert in the Model Context Protocol (MCP).
+
+## Your Knowledge Base
+
+{{url:https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/refs/heads/main/schema/2025-06-18/schema.ts}}
+
+## Instructions
+
+- Always refer to the official schema
+- Provide accurate, up-to-date information
+- Include code examples when relevant
+```
+
+### JSON Files
+
+You can also use JSON files for structured instructions:
+
+```json
+{
+  "role": "You are a helpful AI assistant",
+  "knowledge_base": "{{url:https://example.com/knowledge.json}}",
+  "instructions": [
+    "Always be helpful and accurate",
+    "Cite sources when possible",
+    "Today's date: {{currentDate}}"
+  ]
+}
+```
+
+### YAML Files
+
+YAML files are supported for configuration-style instructions:
+
+```yaml
+role: "Technical Support Specialist"
+company: "{{company_name}}"
+knowledge_base: "{{url:https://example.com/docs.yaml}}"
+instructions:
+  - "Always be professional and helpful"
+  - "Escalate complex issues appropriately"
+  - "Current date: {{currentDate}}"
+```
+
+## Best Practices
+
+### Organization
+
+1. **Use separate files** for complex instructions
+2. **Version control** your instruction files
+3. **Use descriptive names** for instruction files
+4. **Document your templates** with comments
+
+### Maintenance
+
+1. **Keep URLs updated** when content changes
+2. **Test instruction changes** before deployment
+3. **Use relative paths** when possible
+4. **Backup important instructions**
+
+### Performance
+
+1. **Cache external content** when possible
+2. **Minimize URL dependencies** for faster loading
+3. **Use local files** for frequently used instructions
+4. **Optimize template variables** for efficiency
+
+## Error Handling
+
+### URL Fetching Errors
+
+When URLs fail to load, **fast-agent** provides graceful error handling:
+
+```python
+@fast.agent(
+    name="robust_agent",
+    instruction="""You are a helpful assistant.
+    {{url:https://example.com/maybe-unavailable.txt}}
+    If the above content is unavailable, proceed with your general knowledge."""
+)
+```
+
+### File Not Found
+
+If instruction files are missing:
+
+```python
+# This will raise a clear error if the file doesn't exist
+@fast.agent(
+    name="file_agent",
+    instruction=Path("./instructions.md")  # File must exist
+)
+```
+
+### Template Variable Errors
+
+Invalid template variables are handled gracefully:
+
+```python
+# Undefined variables will be left as-is or replaced with empty strings
+@fast.agent(
+    name="template_agent",
+    instruction="Hello {{undefined_variable}}, today is {{currentDate}}"
+)
+# Result: "Hello , today is 25 July 2025"
+```
+
+## Security Considerations
+
+### URL Content
+
+- **Validate URLs** before embedding
+- **Use HTTPS** for external content
+- **Be cautious** with user-provided URLs
+- **Rate limit** URL fetching if needed
+
+### File Access
+
+- **Restrict file paths** to safe directories
+- **Validate file types** before loading
+- **Use absolute paths** sparingly
+- **Log file access** for audit purposes
+
+---
+
+*Source: [https://fast-agent.ai/agents/instructions/](https://fast-agent.ai/agents/instructions/)*

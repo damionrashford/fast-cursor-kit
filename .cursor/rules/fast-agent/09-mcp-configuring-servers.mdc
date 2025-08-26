@@ -1,0 +1,406 @@
+---
+description: How to configure MCP servers with STDIO, HTTP, and SSE transports
+globs: ["**/*.yaml", "**/*.yml", "**/*.py"]
+alwaysApply: true
+---
+
+# Configuring Servers
+
+MCP Servers are configured in the `fastagent.config.yaml` file. Secrets can be kept in `fastagent.secrets.yaml`, which follows the same format (**fast-agent** merges the contents of the two files).
+
+The below shows an example of configuring an MCP Server named `server_one`.
+
+```yaml
+mcp:
+  # name used in agent servers array
+  server_one:
+    # command to run
+    command: "npx"
+    # list of arguments for the command
+    args: ["@modelcontextprotocol/server-brave-search"]
+    # key/value pairs of environment variables
+    env:
+      BRAVE_API_KEY: your_key
+      KEY: value
+  server_two:
+    # and so on ...
+```
+
+This MCP Server can then be used with an agent as follows:
+
+```python
+@fast.agent(
+    name="Search",
+    servers=["server_one"]
+)
+```
+
+## Remote MCP Servers
+
+To use remote MCP Servers, specify the either `http` or `sse` transport and the endpoint URL and headers:
+
+```yaml
+mcp:
+  # name used in agent servers array
+  server_two:
+    transport: "http"  # url to connect
+    url: "http://localhost:8000/mcp"
+    # timeout in seconds to use for sse sessions (optional)
+    read_transport_sse_timeout_seconds: 300
+    # request headers for connection
+    headers:
+      Authorization: "Bearer <secret>"
+  # name used in agent servers array
+  server_three:
+    transport: "sse"  # url to connect
+    url: "http://localhost:8001/sse"
+```
+
+## MCP Filtering
+
+Agents and Workflows supporting the `servers` parameter have the ability to filter the tools, resources and prompts available to the agent. This can greatly reduce the amount of context generated for the agents - which can both increase the accuracy of the responses and reduce costs due to the lower token count of the context.
+
+The default behavior is to include all tools, prompts and resources from the configured MCP servers, but this can be overridden by the `tools`, `prompts` and `resources` parameters. These parameters accept a Dict, where the key of the dict in the name of the server to filter, and the value is a list of the tool names, resource names and prompt names respectively.
+
+For example:
+
+```python
+@fast.agent(
+    name="Search",
+    instruction="You are a search agent that helps users find files using the provided tools.",
+    servers=["server_one", "server_two"]  # use two MCP servers
+    # Filter some of the MCP resources available to the agent
+    tools={
+        "server_one": ["search_files", "search_directory"],
+        "server_two": ["regex_search"]
+    }
+    prompts=None  # Don't filter prompts (default behavior)
+    resources={
+        "server_two": ["file://get_tree"]  # Only filter resources on server_two
+    }
+)
+```
+
+## Implementation Spoofing
+
+**fast-agent** can be used to specify the Implementation details sent to the MCP Server, enabling testing Servers that adapt their configuration based on the client connection. By default **fast-agent** uses the `fast-agent-mcp` and it's current version number.
+
+```yaml
+mcp:
+  server_one:
+    transport: "http"
+    url: "http://localhost:8000/mcp"
+    implementation:
+      name: "spoof-server"
+      version: "9.9.9"
+```
+
+## Roots
+
+**fast-agent** supports MCP Roots. Roots are configured on a per-server basis and allow you to specify the root directory for file operations.
+
+```yaml
+mcp:
+  filesystem_server:
+    command: "uvx"
+    args: ["mcp-server-filesystem"]
+    env:
+      MCP_SERVER_FILESYSTEM_ROOT: "/path/to/root/directory"
+    # Alternative: specify root in the server configuration
+    root: "/path/to/root/directory"
+```
+
+## Server Types and Configuration
+
+### STDIO Servers
+
+STDIO servers run as subprocesses and communicate via standard input/output:
+
+```yaml
+mcp:
+  brave_search:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "your_brave_api_key"
+  
+  filesystem:
+    command: "uvx"
+    args: ["mcp-server-filesystem"]
+    env:
+      MCP_SERVER_FILESYSTEM_ROOT: "/home/user/documents"
+  
+  github:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "your_github_token"
+```
+
+### HTTP Servers
+
+HTTP servers communicate over HTTP/HTTPS:
+
+```yaml
+mcp:
+  remote_api:
+    transport: "http"
+    url: "https://api.example.com/mcp"
+    headers:
+      Authorization: "Bearer your_api_token"
+      X-Custom-Header: "custom_value"
+    timeout: 30  # Request timeout in seconds
+  
+  local_server:
+    transport: "http"
+    url: "http://localhost:8080/mcp"
+    read_transport_sse_timeout_seconds: 300
+```
+
+### SSE Servers
+
+Server-Sent Events servers for real-time communication:
+
+```yaml
+mcp:
+  realtime_data:
+    transport: "sse"
+    url: "http://localhost:9000/sse"
+    headers:
+      Authorization: "Bearer your_token"
+    read_transport_sse_timeout_seconds: 600
+```
+
+## Advanced Configuration
+
+### Environment Variables
+
+You can use environment variables in your configuration:
+
+```yaml
+mcp:
+  api_server:
+    transport: "http"
+    url: "${API_BASE_URL}/mcp"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+      X-API-Version: "${API_VERSION}"
+```
+
+### Conditional Configuration
+
+Use different configurations based on environment:
+
+```yaml
+mcp:
+  search_server:
+    # Development
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "${DEV_BRAVE_API_KEY}"
+  
+  # Production (commented out)
+  # search_server:
+  #   transport: "http"
+  #   url: "https://production-search-api.com/mcp"
+  #   headers:
+  #     Authorization: "Bearer ${PROD_API_TOKEN}"
+```
+
+### Server Groups
+
+Organize servers into logical groups:
+
+```yaml
+mcp:
+  # Search and discovery servers
+  brave_search:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+  
+  github_search:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+  
+  # File and storage servers
+  filesystem:
+    command: "uvx"
+    args: ["mcp-server-filesystem"]
+    env:
+      MCP_SERVER_FILESYSTEM_ROOT: "${FILESYSTEM_ROOT}"
+  
+  s3_storage:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-s3"]
+    env:
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_REGION: "${AWS_REGION}"
+```
+
+## Security Considerations
+
+### API Key Management
+
+Store sensitive information in `fastagent.secrets.yaml`:
+
+```yaml
+# fastagent.secrets.yaml (not committed to version control)
+mcp:
+  brave_search:
+    env:
+      BRAVE_API_KEY: "sk-..."
+  
+  github:
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "ghp_..."
+```
+
+### Network Security
+
+For remote servers, use secure connections:
+
+```yaml
+mcp:
+  secure_server:
+    transport: "https"
+    url: "https://secure-api.example.com/mcp"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+    # Verify SSL certificates
+    verify_ssl: true
+    # Custom CA bundle if needed
+    ca_bundle: "/path/to/ca-bundle.crt"
+```
+
+### Access Control
+
+Implement proper access control for your servers:
+
+```yaml
+mcp:
+  restricted_server:
+    transport: "http"
+    url: "http://localhost:8000/mcp"
+    headers:
+      Authorization: "Bearer ${ACCESS_TOKEN}"
+      X-User-ID: "${USER_ID}"
+      X-Permissions: "${USER_PERMISSIONS}"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Server Not Starting
+
+```yaml
+mcp:
+  problematic_server:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+    # Add debugging
+    debug: true
+    # Specify working directory
+    cwd: "/path/to/working/directory"
+```
+
+#### Connection Timeouts
+
+```yaml
+mcp:
+  slow_server:
+    transport: "http"
+    url: "http://slow-api.example.com/mcp"
+    # Increase timeouts
+    timeout: 60
+    read_transport_sse_timeout_seconds: 600
+    # Retry configuration
+    retries: 3
+    retry_delay: 5
+```
+
+#### Authentication Issues
+
+```yaml
+mcp:
+  auth_server:
+    transport: "http"
+    url: "http://api.example.com/mcp"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+      X-API-Key: "${API_KEY}"
+    # Debug authentication
+    debug_auth: true
+```
+
+### Debugging Tools
+
+Enable debugging for MCP connections:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "DEBUG"
+  mcp:
+    enabled: true
+    level: "DEBUG"
+    show_messages: true
+    show_tool_calls: true
+```
+
+### Health Checks
+
+Test server connectivity:
+
+```bash
+# Test all configured servers
+fast-agent check --servers
+
+# Test specific server
+fast-agent check --server brave_search
+
+# Show server configuration
+fast-agent check show --servers
+```
+
+## Best Practices
+
+### Organization
+
+1. **Use descriptive server names** - Make it clear what each server does
+2. **Group related servers** - Organize by functionality
+3. **Document server purposes** - Add comments explaining what each server provides
+4. **Version control configuration** - Keep non-sensitive config in version control
+
+### Security
+
+1. **Use secrets file** - Store API keys in `fastagent.secrets.yaml`
+2. **Use environment variables** - Reference secrets via environment variables
+3. **Limit server access** - Only give agents access to servers they need
+4. **Use secure connections** - Prefer HTTPS over HTTP for remote servers
+
+### Performance
+
+1. **Filter tools and resources** - Only include what agents need
+2. **Use appropriate timeouts** - Set reasonable timeout values
+3. **Implement retry logic** - Handle temporary failures gracefully
+4. **Monitor server health** - Check server status regularly
+
+### Maintenance
+
+1. **Keep servers updated** - Regularly update MCP server packages
+2. **Test configurations** - Validate server configurations before deployment
+3. **Monitor usage** - Track which servers are being used
+4. **Document changes** - Keep track of configuration changes
+
+---
+
+*Source: [https://fast-agent.ai/mcp/](https://fast-agent.ai/mcp/)*

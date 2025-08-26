@@ -1,0 +1,928 @@
+# Neon Vector Database and Embeddings Guide
+
+## Vector Database Overview
+
+Neon Postgres with **pgvector** extension provides powerful vector database capabilities for AI applications, enabling semantic search, similarity matching, and embedding storage.
+
+## pgvector Setup and Configuration
+
+### 1. **Enabling pgvector Extension**
+
+```sql
+-- Enable pgvector extension in Neon
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Verify installation
+SELECT * FROM pg_extension WHERE extname = 'vector';
+```
+
+### 2. **Vector Column Types**
+
+```sql
+-- Different vector dimensions for different embedding models
+CREATE TABLE documents (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    content TEXT,
+    -- OpenAI embeddings (1536 dimensions)
+    openai_embedding vector(1536),
+    -- Sentence transformers (384 dimensions)
+    sentence_embedding vector(384),
+    -- Custom embeddings (variable dimensions)
+    custom_embedding vector(512),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 3. **Vector Indexes**
+
+```sql
+-- Create HNSW index for fast similarity search
+CREATE INDEX ON documents USING hnsw (openai_embedding vector_cosine_ops);
+
+-- Create IVFFlat index for approximate search
+CREATE INDEX ON documents USING ivfflat (sentence_embedding vector_cosine_ops) 
+    WITH (lists = 100);
+
+-- Create L2 distance index
+CREATE INDEX ON documents USING hnsw (custom_embedding vector_l2_ops);
+```
+
+## Framework Integrations
+
+### 1. **FastAPI + SQLAlchemy + pgvector**
+
+```python
+# main.py
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy.dialects.postgresql import VECTOR
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime
+import numpy as np
+import os
+
+app = FastAPI()
+
+# Neon connection with pgvector
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname?sslmode=require")
+engine = create_engine(DATABASE_URL)
+
+# Enable pgvector extension
+with engine.connect() as conn:
+    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class Document(Base):
+    __tablename__ = "documents"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    content = Column(Text)
+    embedding = Column(VECTOR(1536))  # OpenAI embedding dimension
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Vector similarity search endpoint
+@app.post("/search")
+def search_documents(query_embedding: list, limit: int = 10, db: Session = Depends(get_db)):
+    """Search documents by vector similarity"""
+    try:
+        embedding_array = np.array(query_embedding)
+        
+        # Cosine similarity search using raw SQL
+        results = db.execute("""
+            SELECT 
+                id, 
+                title, 
+                content, 
+                embedding <=> %s as distance
+            FROM documents 
+            ORDER BY embedding <=> %s 
+            LIMIT %s
+        """, (embedding_array, embedding_array, limit))
+        
+        return [{"id": r.id, "title": r.title, "content": r.content, "distance": float(r.distance)} 
+                for r in results]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+# Add document with embedding
+@app.post("/documents")
+def add_document(title: str, content: str, embedding: list, db: Session = Depends(get_db)):
+    """Add document with embedding"""
+    try:
+        embedding_array = np.array(embedding)
+        doc = Document(title=title, content=content, embedding=embedding_array)
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        return {"id": doc.id, "title": doc.title, "status": "added"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add document: {str(e)}")
+
+# Batch insert documents
+@app.post("/documents/batch")
+def add_documents_batch(documents: list, db: Session = Depends(get_db)):
+    """Add multiple documents with embeddings"""
+    try:
+        docs = []
+        for doc_data in documents:
+            embedding_array = np.array(doc_data["embedding"])
+            doc = Document(
+                title=doc_data["title"],
+                content=doc_data["content"],
+                embedding=embedding_array
+            )
+            docs.append(doc)
+        
+        db.add_all(docs)
+        db.commit()
+        return {"status": "added", "count": len(docs)}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Batch insert failed: {str(e)}")
+```
+
+### 2. **Django + pgvector**
+
+```python
+# models.py
+from django.db import models
+from django.contrib.postgres.fields import ArrayField
+import numpy as np
+
+class Document(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    embedding = ArrayField(models.FloatField(), size=1536)  # Vector field
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'documents'
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
+    
+    @classmethod
+    def search_similar(cls, query_embedding, limit=10, distance_threshold=0.8):
+        """Search for similar documents using pgvector"""
+        embedding_array = np.array(query_embedding)
+        
+        # Raw SQL for vector similarity with distance threshold
+        return cls.objects.raw("""
+            SELECT 
+                id, 
+                title, 
+                content, 
+                created_at,
+                1 - (embedding <=> %s) as similarity
+            FROM documents
+            WHERE 1 - (embedding <=> %s) > %s
+            ORDER BY embedding <=> %s
+            LIMIT %s
+        """, [embedding_array, embedding_array, distance_threshold, embedding_array, limit])
+    
+    @classmethod
+    def find_nearest_neighbors(cls, query_embedding, k=5):
+        """Find k-nearest neighbors"""
+        embedding_array = np.array(query_embedding)
+        
+        return cls.objects.raw("""
+            SELECT 
+                id, 
+                title, 
+                content,
+                embedding <=> %s as distance
+            FROM documents
+            ORDER BY embedding <=> %s
+            LIMIT %s
+        """, [embedding_array, embedding_array, k])
+
+# views.py
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import json
+import numpy as np
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def search_documents(request):
+    """Search documents by vector similarity"""
+    try:
+        data = json.loads(request.body)
+        query_embedding = data.get('embedding')
+        limit = data.get('limit', 10)
+        threshold = data.get('threshold', 0.8)
+        
+        if not query_embedding:
+            return JsonResponse({'error': 'Embedding required'}, status=400)
+        
+        documents = Document.search_similar(
+            query_embedding=query_embedding,
+            limit=limit,
+            distance_threshold=threshold
+        )
+        
+        results = []
+        for doc in documents:
+            results.append({
+                'id': doc.id,
+                'title': doc.title,
+                'content': doc.content,
+                'similarity': float(doc.similarity),
+                'created_at': doc.created_at.isoformat()
+            })
+        
+        return JsonResponse({'results': results})
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def add_document(request):
+    """Add document with embedding"""
+    try:
+        data = json.loads(request.body)
+        title = data.get('title')
+        content = data.get('content')
+        embedding = data.get('embedding')
+        
+        if not all([title, content, embedding]):
+            return JsonResponse({'error': 'Title, content, and embedding required'}, status=400)
+        
+        doc = Document.objects.create(
+            title=title,
+            content=content,
+            embedding=embedding
+        )
+        
+        return JsonResponse({
+            'id': doc.id,
+            'title': doc.title,
+            'status': 'created'
+        })
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+```
+
+### 3. **Next.js + pgvector**
+
+```typescript
+// lib/db.ts
+import { Pool } from 'pg'
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
+
+// Initialize pgvector
+pool.query('CREATE EXTENSION IF NOT EXISTS vector')
+
+export default pool
+
+// pages/api/vector-search.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+import pool from '../../lib/db'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'POST') {
+    try {
+      const { query_embedding, limit = 10, threshold = 0.8 } = req.body
+      
+      if (!query_embedding || !Array.isArray(query_embedding)) {
+        return res.status(400).json({ error: 'Valid embedding array required' })
+      }
+      
+      const result = await pool.query(`
+        SELECT 
+          id, 
+          title, 
+          content, 
+          1 - (embedding <=> $1) as similarity
+        FROM documents 
+        WHERE 1 - (embedding <=> $1) > $2
+        ORDER BY embedding <=> $1 
+        LIMIT $3
+      `, [query_embedding, threshold, limit])
+      
+      res.status(200).json({ results: result.rows })
+    } catch (error) {
+      res.status(500).json({ error: 'Vector search failed' })
+    }
+  } else {
+    res.setHeader('Allow', ['POST'])
+    res.status(405).end(`Method ${req.method} Not Allowed`)
+  }
+}
+
+// pages/api/documents.ts
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'POST') {
+    try {
+      const { title, content, embedding } = req.body
+      
+      if (!title || !content || !embedding) {
+        return res.status(400).json({ error: 'Title, content, and embedding required' })
+      }
+      
+      const result = await pool.query(`
+        INSERT INTO documents (title, content, embedding)
+        VALUES ($1, $2, $3)
+        RETURNING id, title
+      `, [title, content, embedding])
+      
+      res.status(201).json(result.rows[0])
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to add document' })
+    }
+  } else if (req.method === 'GET') {
+    try {
+      const result = await pool.query(`
+        SELECT id, title, content, created_at
+        FROM documents
+        ORDER BY created_at DESC
+        LIMIT 100
+      `)
+      
+      res.status(200).json({ documents: result.rows })
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch documents' })
+    }
+  }
+}
+```
+
+### 4. **Prisma + pgvector**
+
+```typescript
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  embedding Float[]  // Vector field
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// lib/prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+let prisma: PrismaClient
+
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient()
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient()
+  }
+  prisma = global.prisma
+}
+
+export default prisma
+
+// pages/api/vector-search.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+import prisma from '../../lib/prisma'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'POST') {
+    try {
+      const { query_embedding, limit = 10 } = req.body
+      
+      // Use raw query for vector operations
+      const results = await prisma.$queryRaw`
+        SELECT 
+          id, 
+          title, 
+          content, 
+          embedding <=> ${query_embedding} as distance
+        FROM "Document" 
+        ORDER BY embedding <=> ${query_embedding} 
+        LIMIT ${limit}
+      `
+      
+      res.status(200).json({ results })
+    } catch (error) {
+      res.status(500).json({ error: 'Vector search failed' })
+    }
+  }
+}
+
+// pages/api/documents.ts
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'POST') {
+    try {
+      const { title, content, embedding } = req.body
+      
+      const document = await prisma.document.create({
+        data: {
+          title,
+          content,
+          embedding
+        }
+      })
+      
+      res.status(201).json(document)
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create document' })
+    }
+  }
+}
+```
+
+## Embedding Generation and Management
+
+### 1. **OpenAI Embeddings Integration**
+
+```python
+# embeddings/openai_embeddings.py
+import openai
+import numpy as np
+from typing import List, Dict, Any
+import os
+
+class OpenAIEmbeddings:
+    def __init__(self, api_key: str = None):
+        self.client = openai.OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        self.model = "text-embedding-3-small"  # 1536 dimensions
+    
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding for a single text"""
+        try:
+            response = self.client.embeddings.create(
+                model=self.model,
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            raise Exception(f"Failed to generate embedding: {str(e)}")
+    
+    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts"""
+        try:
+            response = self.client.embeddings.create(
+                model=self.model,
+                input=texts
+            )
+            return [data.embedding for data in response.data]
+        except Exception as e:
+            raise Exception(f"Failed to generate batch embeddings: {str(e)}")
+    
+    def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+        """Split text into chunks for embedding"""
+        words = text.split()
+        chunks = []
+        
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk = " ".join(words[i:i + chunk_size])
+            if chunk.strip():
+                chunks.append(chunk)
+        
+        return chunks
+
+# Usage with FastAPI
+from fastapi import FastAPI, HTTPException
+from embeddings.openai_embeddings import OpenAIEmbeddings
+
+app = FastAPI()
+embeddings = OpenAIEmbeddings()
+
+@app.post("/generate-embedding")
+async def generate_embedding(text: str):
+    """Generate embedding for text"""
+    try:
+        embedding = embeddings.generate_embedding(text)
+        return {"embedding": embedding, "dimensions": len(embedding)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/process-document")
+async def process_document(title: str, content: str, db: Session = Depends(get_db)):
+    """Process document and store with embedding"""
+    try:
+        # Generate embedding
+        embedding = embeddings.generate_embedding(content)
+        
+        # Store in database
+        doc = Document(title=title, content=content, embedding=embedding)
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        
+        return {"id": doc.id, "title": doc.title, "status": "processed"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### 2. **Sentence Transformers Integration**
+
+```python
+# embeddings/sentence_transformers.py
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from typing import List
+
+class SentenceTransformerEmbeddings:
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        self.model = SentenceTransformer(model_name)
+        self.dimensions = self.model.get_sentence_embedding_dimension()
+    
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding using sentence transformers"""
+        embedding = self.model.encode(text)
+        return embedding.tolist()
+    
+    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts"""
+        embeddings = self.model.encode(texts)
+        return embeddings.tolist()
+    
+    def similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
+        """Calculate cosine similarity between embeddings"""
+        vec1 = np.array(embedding1)
+        vec2 = np.array(embedding2)
+        return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+# Usage
+embeddings = SentenceTransformerEmbeddings()
+
+# Generate embedding
+text = "This is a sample document for embedding generation."
+embedding = embeddings.generate_embedding(text)
+print(f"Embedding dimensions: {len(embedding)}")
+```
+
+## Advanced Vector Operations
+
+### 1. **Hybrid Search (Vector + Text)**
+
+```python
+# hybrid_search.py
+from sqlalchemy import text
+from typing import List, Dict, Any
+
+class HybridSearch:
+    def __init__(self, db_session):
+        self.db = db_session
+    
+    def search(self, query: str, query_embedding: List[float], 
+               vector_weight: float = 0.7, text_weight: float = 0.3,
+               limit: int = 10) -> List[Dict[str, Any]]:
+        """Hybrid search combining vector similarity and text search"""
+        
+        # Normalize weights
+        total_weight = vector_weight + text_weight
+        vector_weight /= total_weight
+        text_weight /= total_weight
+        
+        results = self.db.execute(text("""
+            SELECT 
+                id,
+                title,
+                content,
+                embedding <=> :embedding as vector_distance,
+                ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)) as text_rank
+            FROM documents
+            WHERE to_tsvector('english', content) @@ plainto_tsquery('english', :query)
+            ORDER BY 
+                (:vector_weight * (1 - (embedding <=> :embedding))) + 
+                (:text_weight * ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)))
+            LIMIT :limit
+        """), {
+            'embedding': query_embedding,
+            'query': query,
+            'vector_weight': vector_weight,
+            'text_weight': text_weight,
+            'limit': limit
+        })
+        
+        return [dict(row) for row in results]
+```
+
+### 2. **Vector Clustering**
+
+```python
+# vector_clustering.py
+import numpy as np
+from sklearn.cluster import KMeans
+from typing import List, Dict, Any
+
+class VectorClustering:
+    def __init__(self, db_session):
+        self.db = db_session
+    
+    def cluster_documents(self, n_clusters: int = 5) -> Dict[int, List[Dict[str, Any]]]:
+        """Cluster documents based on their embeddings"""
+        
+        # Get all embeddings
+        results = self.db.execute("""
+            SELECT id, title, content, embedding
+            FROM documents
+        """)
+        
+        documents = [dict(row) for row in results]
+        embeddings = np.array([doc['embedding'] for doc in documents])
+        
+        # Perform clustering
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        cluster_labels = kmeans.fit_predict(embeddings)
+        
+        # Group documents by cluster
+        clusters = {}
+        for i, doc in enumerate(documents):
+            cluster_id = int(cluster_labels[i])
+            if cluster_id not in clusters:
+                clusters[cluster_id] = []
+            clusters[cluster_id].append(doc)
+        
+        return clusters
+    
+    def find_cluster_centroids(self, n_clusters: int = 5) -> List[List[float]]:
+        """Find centroids of document clusters"""
+        results = self.db.execute("SELECT embedding FROM documents")
+        embeddings = np.array([row[0] for row in results])
+        
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        kmeans.fit(embeddings)
+        
+        return kmeans.cluster_centers_.tolist()
+```
+
+### 3. **Vector Similarity Metrics**
+
+```python
+# vector_metrics.py
+import numpy as np
+from typing import List, Tuple
+
+class VectorMetrics:
+    @staticmethod
+    def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors"""
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    
+    @staticmethod
+    def euclidean_distance(vec1: List[float], vec2: List[float]) -> float:
+        """Calculate Euclidean distance between two vectors"""
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        return np.linalg.norm(vec1 - vec2)
+    
+    @staticmethod
+    def manhattan_distance(vec1: List[float], vec2: List[float]) -> float:
+        """Calculate Manhattan distance between two vectors"""
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        return np.sum(np.abs(vec1 - vec2))
+    
+    @staticmethod
+    def find_most_similar(embedding: List[float], embeddings: List[List[float]], 
+                         top_k: int = 5) -> List[Tuple[int, float]]:
+        """Find most similar embeddings"""
+        similarities = []
+        for i, other_embedding in enumerate(embeddings):
+            similarity = VectorMetrics.cosine_similarity(embedding, other_embedding)
+            similarities.append((i, similarity))
+        
+        # Sort by similarity (descending)
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        return similarities[:top_k]
+```
+
+## Performance Optimization
+
+### 1. **Index Optimization**
+
+```sql
+-- Create optimized indexes for different use cases
+-- HNSW index for fast approximate search
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops) 
+    WITH (m = 16, ef_construction = 64);
+
+-- IVFFlat index for large datasets
+CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops) 
+    WITH (lists = 100);
+
+-- L2 distance index
+CREATE INDEX ON documents USING hnsw (embedding vector_l2_ops);
+
+-- Composite index with metadata
+CREATE INDEX ON documents (created_at, embedding vector_cosine_ops);
+```
+
+### 2. **Connection Pooling for Vector Operations**
+
+```python
+# vector_pool.py
+import psycopg2
+from psycopg2 import pool
+import os
+
+class VectorConnectionPool:
+    def __init__(self, min_conn=1, max_conn=20):
+        self.pool = psycopg2.pool.SimpleConnectionPool(
+            min_conn, max_conn,
+            os.getenv('DATABASE_URL'),
+            options='-c search_path=public',
+            sslmode='require'
+        )
+    
+    def vector_search(self, query_embedding: List[float], limit: int = 10):
+        """Perform vector search using connection pool"""
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, title, content, embedding <=> %s as distance
+                FROM documents
+                ORDER BY embedding <=> %s
+                LIMIT %s
+            """, (query_embedding, query_embedding, limit))
+            return cursor.fetchall()
+        finally:
+            self.pool.putconn(conn)
+    
+    def batch_insert(self, documents: List[Dict[str, Any]]):
+        """Batch insert documents with embeddings"""
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            for doc in documents:
+                cursor.execute("""
+                    INSERT INTO documents (title, content, embedding)
+                    VALUES (%s, %s, %s)
+                """, (doc['title'], doc['content'], doc['embedding']))
+            conn.commit()
+        finally:
+            self.pool.putconn(conn)
+```
+
+## AI Agent Integration
+
+### 1. **Vector Search for AI Agents**
+
+```python
+# ai_vector_search.py
+from fastapi import FastAPI
+from typing import List, Dict, Any
+import numpy as np
+
+class AIVectorSearch:
+    def __init__(self, db_session, embedding_model):
+        self.db = db_session
+        self.embedding_model = embedding_model
+    
+    def semantic_search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Semantic search for AI agents"""
+        # Generate query embedding
+        query_embedding = self.embedding_model.generate_embedding(query)
+        
+        # Search similar documents
+        results = self.db.execute("""
+            SELECT id, title, content, 1 - (embedding <=> %s) as similarity
+            FROM documents
+            ORDER BY embedding <=> %s
+            LIMIT %s
+        """, (query_embedding, query_embedding, limit))
+        
+        return [dict(row) for row in results]
+    
+    def context_retrieval(self, user_query: str, context_limit: int = 3) -> str:
+        """Retrieve relevant context for AI responses"""
+        similar_docs = self.semantic_search(user_query, context_limit)
+        
+        context = ""
+        for doc in similar_docs:
+            context += f"Document: {doc['title']}\n{doc['content']}\n\n"
+        
+        return context.strip()
+    
+    def knowledge_base_query(self, question: str) -> Dict[str, Any]:
+        """Query knowledge base for AI agent responses"""
+        relevant_docs = self.semantic_search(question, 5)
+        
+        return {
+            "question": question,
+            "relevant_documents": relevant_docs,
+            "context": self.context_retrieval(question),
+            "confidence": np.mean([doc['similarity'] for doc in relevant_docs])
+        }
+
+# Usage with AI agents
+app = FastAPI()
+ai_search = AIVectorSearch(db_session, OpenAIEmbeddings())
+
+@app.post("/ai/query")
+async def ai_query(question: str):
+    """AI agent query with vector search"""
+    result = ai_search.knowledge_base_query(question)
+    return result
+```
+
+### 2. **Vector Database for AI Memory**
+
+```python
+# ai_memory.py
+from datetime import datetime
+from typing import List, Dict, Any
+
+class AIMemory:
+    def __init__(self, db_session, embedding_model):
+        self.db = db_session
+        self.embedding_model = embedding_model
+    
+    def store_memory(self, user_id: str, interaction: str, response: str):
+        """Store AI interaction in vector memory"""
+        # Combine interaction and response
+        memory_text = f"User: {interaction}\nAI: {response}"
+        
+        # Generate embedding
+        embedding = self.embedding_model.generate_embedding(memory_text)
+        
+        # Store in database
+        self.db.execute("""
+            INSERT INTO ai_memories (user_id, interaction, response, embedding, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (user_id, interaction, response, embedding, datetime.utcnow()))
+        self.db.commit()
+    
+    def recall_memories(self, user_id: str, current_context: str, limit: int = 5):
+        """Recall relevant memories for current context"""
+        context_embedding = self.embedding_model.generate_embedding(current_context)
+        
+        results = self.db.execute("""
+            SELECT interaction, response, 1 - (embedding <=> %s) as relevance
+            FROM ai_memories
+            WHERE user_id = %s
+            ORDER BY embedding <=> %s
+            LIMIT %s
+        """, (context_embedding, user_id, context_embedding, limit))
+        
+        return [dict(row) for row in results]
+    
+    def get_user_context(self, user_id: str, current_query: str) -> str:
+        """Get relevant user context for AI responses"""
+        memories = self.recall_memories(user_id, current_query, 3)
+        
+        context = "Previous relevant interactions:\n"
+        for memory in memories:
+            context += f"- User: {memory['interaction']}\n"
+            context += f"  AI: {memory['response']}\n\n"
+        
+        return context.strip()
+```
+
+This comprehensive vector database and embeddings guide covers all aspects of using pgvector with Neon Postgres, including framework integrations, embedding generation, advanced operations, and AI agent integration.
+description: Complete vector database and embeddings guide for Neon Postgres with pgvector, AI integration, and framework support
+globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.sql", "**/*.yaml", "**/*.yml", "**/*.json"]
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,626 @@
+---
+description: Configuration file format and options reference
+globs: ["**/*.yaml", "**/*.yml", "**/*.py"]
+alwaysApply: true
+---
+
+# Configuration Reference
+
+**fast-agent** can be configured through the `fastagent.config.yaml` file, which should be placed in your project's root directory. For sensitive information, you can use `fastagent.secrets.yaml` with the same structure - values from both files will be merged, with secrets taking precedence.
+
+Configuration can also be provided through environment variables, with the naming pattern `SECTION__SUBSECTION__PROPERTY` (note the double underscores).
+
+## Configuration File Location
+
+fast-agent automatically searches for configuration files in the current working directory and its parent directories. You can also specify a configuration file path with the `--config` command-line argument.
+
+## General Settings
+
+```yaml
+# Default model for all agents
+default_model: "haiku"
+
+# Format: provider.model_name.reasoning_effort
+# Whether to automatically enable Sampling. Model selection precedence is Agent > Default.
+auto_sampling: true
+
+# Execution engine (only asyncio is currently supported)
+execution_engine: "asyncio"
+```
+
+## Model Providers
+
+### Anthropic
+
+```yaml
+anthropic:
+  api_key: "your_anthropic_key"  # Can also use ANTHROPIC_API_KEY env var
+  base_url: "https://api.anthropic.com/v1"  # Optional, only include to override
+```
+
+### OpenAI
+
+```yaml
+openai:
+  api_key: "your_openai_key"  # Can also use OPENAI_API_KEY env var
+  base_url: "https://api.openai.com/v1"  # Optional, only include to override
+  reasoning_effort: "medium"  # Default reasoning effort: "low", "medium", or "high"
+```
+
+### Azure OpenAI
+
+```yaml
+# Option 1: Using resource_name and api_key (standard method)
+azure:
+  api_key: "your_azure_openai_key"  # Required unless using DefaultAzureCredential
+  resource_name: "your-resource-name"  # Resource name in Azure
+  azure_deployment: "deployment-name"  # Required - deployment name from Azure
+  api_version: "2023-05-15"  # Optional API version
+  # Do NOT include base_url if you use resource_name
+
+# Option 2: Using base_url and api_key (custom endpoints or sovereign clouds)
+# azure:
+#   api_key: "your_azure_openai_key"
+#   base_url: "https://your-endpoint.openai.azure.com/"
+#   azure_deployment: "deployment-name"
+#   api_version: "2023-05-15"
+#   # Do NOT include resource_name if you use base_url
+
+# Option 3: Using DefaultAzureCredential (for managed identity, Azure CLI, etc.)
+# azure:
+#   use_default_azure_credential: true
+#   base_url: "https://your-endpoint.openai.azure.com/"
+#   azure_deployment: "deployment-name"
+#   api_version: "2023-05-15"
+#   # Do NOT include api_key or resource_name in this mode
+```
+
+**Important configuration notes:**
+- Use either `resource_name` or `base_url`, not both.
+- When using `DefaultAzureCredential`, do NOT include `api_key` or `resource_name` (the `azure-identity` package must be installed).
+- When using `base_url`, do NOT include `resource_name`.
+- When using `resource_name`, do NOT include `base_url`.
+- The model string format is `azure.deployment-name`
+
+### DeepSeek
+
+```yaml
+deepseek:
+  api_key: "your_deepseek_key"  # Can also use DEEPSEEK_API_KEY env var
+  base_url: "https://api.deepseek.com/v1"  # Optional, only include if required
+```
+
+### Generic
+
+```yaml
+generic:
+  api_key: "your_api_key"  # Can also use GENERIC_API_KEY env var
+  base_url: "https://your-api-endpoint.com/v1"  # Required
+  model_name: "your-model-name"  # Optional, can be overridden in model string
+```
+
+### OpenRouter
+
+```yaml
+openrouter:
+  api_key: "your_openrouter_key"  # Can also use OPENROUTER_API_KEY env var
+  base_url: "https://openrouter.ai/api/v1"  # Default, only include if required
+```
+
+### TensorZero
+
+```yaml
+tensorzero:
+  api_key: "your_tensorzero_key"  # Can also use TENSORZERO_API_KEY env var
+  base_url: "https://api.tensorzero.ai"  # Default, only include if required
+```
+
+### Ollama
+
+```yaml
+ollama:
+  base_url: "http://localhost:11434"  # Default Ollama endpoint
+  model_name: "llama3.2:latest"  # Default model
+```
+
+## MCP Server Configuration
+
+### Basic Server Configuration
+
+```yaml
+mcp:
+  # STDIO server example
+  brave_search:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "your_brave_api_key"
+  
+  # HTTP server example
+  remote_api:
+    transport: "http"
+    url: "https://api.example.com/mcp"
+    headers:
+      Authorization: "Bearer your_api_token"
+  
+  # SSE server example
+  realtime_data:
+    transport: "sse"
+    url: "http://localhost:9000/sse"
+    read_transport_sse_timeout_seconds: 600
+```
+
+### Advanced Server Configuration
+
+```yaml
+mcp:
+  filesystem:
+    command: "uvx"
+    args: ["mcp-server-filesystem"]
+    env:
+      MCP_SERVER_FILESYSTEM_ROOT: "/path/to/root/directory"
+    root: "/path/to/root/directory"  # Alternative way to specify root
+  
+  github:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "your_github_token"
+    implementation:
+      name: "custom-github-server"
+      version: "1.0.0"
+  
+  secure_server:
+    transport: "https"
+    url: "https://secure-api.example.com/mcp"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+    verify_ssl: true
+    ca_bundle: "/path/to/ca-bundle.crt"
+```
+
+## Logging Configuration
+
+### Basic Logging
+
+```yaml
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "detailed"  # simple, detailed, json
+  file: "fast-agent.log"  # Optional: log to file
+```
+
+### Advanced Logging
+
+```yaml
+logging:
+  level: "DEBUG"
+  format: "detailed"
+  file: "fast-agent.log"
+  max_size: "10MB"  # Log rotation
+  backup_count: 5
+  mcp:
+    enabled: true
+    level: "DEBUG"
+    show_messages: true
+    show_tool_calls: true
+  elicitations:
+    enabled: true
+    show_requests: true
+    show_responses: true
+  state_transfer:
+    enabled: true
+    show_transfers: true
+    show_validation: true
+```
+
+## Caching Configuration
+
+### Response Caching
+
+```yaml
+caching:
+  enabled: true
+  ttl: 3600  # Cache for 1 hour
+  max_size: 1000  # Maximum cache entries
+  backend: "memory"  # memory, redis, file
+```
+
+### Redis Caching
+
+```yaml
+caching:
+  enabled: true
+  backend: "redis"
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    password: "your_redis_password"
+  ttl: 3600
+  max_size: 10000
+```
+
+## OpenTelemetry Configuration
+
+### Basic Telemetry
+
+```yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"  # This is the default value
+```
+
+### Advanced Telemetry
+
+```yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"
+  service_name: "fast-agent"
+  service_version: "1.0.0"
+  environment: "production"
+  sampling_rate: 1.0  # 0.0 to 1.0
+  attributes:
+    deployment: "production"
+    team: "ai-platform"
+```
+
+## Template Variables
+
+### Custom Template Variables
+
+```yaml
+template_vars:
+  company_name: "Acme Corp"
+  api_version: "v2.1"
+  support_email: "support@acme.com"
+  environment: "production"
+  max_tokens: 2048
+```
+
+### Environment-Specific Variables
+
+```yaml
+# Development
+template_vars:
+  environment: "development"
+  debug_mode: true
+  api_base_url: "http://localhost:8000"
+
+# Production (in fastagent.secrets.yaml)
+# template_vars:
+#   environment: "production"
+#   debug_mode: false
+#   api_base_url: "https://api.production.com"
+```
+
+## Performance Configuration
+
+### Request Limits
+
+```yaml
+performance:
+  max_concurrent_requests: 10
+  request_timeout: 30  # seconds
+  retry_attempts: 3
+  retry_delay: 1  # seconds
+  rate_limit:
+    requests_per_minute: 60
+    burst_size: 10
+```
+
+### Memory Management
+
+```yaml
+performance:
+  max_memory_usage: "2GB"
+  gc_threshold: 0.8  # Trigger GC at 80% memory usage
+  cache_cleanup_interval: 300  # seconds
+```
+
+## Security Configuration
+
+### Authentication
+
+```yaml
+security:
+  require_authentication: true
+  allowed_origins:
+    - "https://yourdomain.com"
+    - "http://localhost:3000"
+  cors:
+    enabled: true
+    allow_credentials: true
+```
+
+### API Key Management
+
+```yaml
+security:
+  api_key_rotation:
+    enabled: true
+    rotation_interval: 86400  # 24 hours
+  key_validation:
+    enabled: true
+    validation_interval: 3600  # 1 hour
+```
+
+## Environment Variables
+
+### Provider Configuration
+
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY="your_anthropic_key"
+export ANTHROPIC_BASE_URL="https://api.anthropic.com/v1"
+
+# OpenAI
+export OPENAI_API_KEY="your_openai_key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# Azure OpenAI
+export AZURE_OPENAI_API_KEY="your_azure_openai_key"
+export AZURE_OPENAI_RESOURCE_NAME="your-resource-name"
+export AZURE_OPENAI_DEPLOYMENT_NAME="deployment-name"
+
+# DeepSeek
+export DEEPSEEK_API_KEY="your_deepseek_key"
+export DEEPSEEK_BASE_URL="https://api.deepseek.com/v1"
+
+# Generic
+export GENERIC_API_KEY="your_api_key"
+export GENERIC_BASE_URL="https://your-api-endpoint.com/v1"
+export GENERIC_MODEL_NAME="your-model-name"
+
+# OpenRouter
+export OPENROUTER_API_KEY="your_openrouter_key"
+export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
+
+# TensorZero
+export TENSORZERO_API_KEY="your_tensorzero_key"
+export TENSORZERO_BASE_URL="https://api.tensorzero.ai"
+
+# Ollama
+export OLLAMA_BASE_URL="http://localhost:11434"
+export OLLAMA_MODEL_NAME="llama3.2:latest"
+```
+
+### General Configuration
+
+```bash
+# General settings
+export FAST_AGENT__DEFAULT_MODEL="haiku"
+export FAST_AGENT__AUTO_SAMPLING="true"
+export FAST_AGENT__EXECUTION_ENGINE="asyncio"
+
+# Logging
+export FAST_AGENT__LOGGING__LEVEL="INFO"
+export FAST_AGENT__LOGGING__FORMAT="detailed"
+
+# Telemetry
+export FAST_AGENT__OTEL__ENABLED="true"
+export FAST_AGENT__OTEL__OTLP_ENDPOINT="http://localhost:4318/v1/traces"
+
+# Performance
+export FAST_AGENT__PERFORMANCE__MAX_CONCURRENT_REQUESTS="10"
+export FAST_AGENT__PERFORMANCE__REQUEST_TIMEOUT="30"
+```
+
+## Configuration Examples
+
+### Development Configuration
+
+```yaml
+# fastagent.config.yaml
+default_model: "openai.gpt-4o-mini"
+auto_sampling: true
+
+openai:
+  api_key: "${OPENAI_API_KEY}"
+
+anthropic:
+  api_key: "${ANTHROPIC_API_KEY}"
+
+mcp:
+  filesystem:
+    command: "uvx"
+    args: ["mcp-server-filesystem"]
+    env:
+      MCP_SERVER_FILESYSTEM_ROOT: "./data"
+
+logging:
+  level: "DEBUG"
+  format: "detailed"
+
+template_vars:
+  environment: "development"
+  debug_mode: true
+```
+
+### Production Configuration
+
+```yaml
+# fastagent.config.yaml
+default_model: "openai.gpt-4o"
+auto_sampling: false
+
+openai:
+  api_key: "${OPENAI_API_KEY}"
+
+anthropic:
+  api_key: "${ANTHROPIC_API_KEY}"
+
+mcp:
+  brave_search:
+    command: "npx"
+    args: ["@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+
+logging:
+  level: "INFO"
+  format: "json"
+  file: "/var/log/fast-agent.log"
+
+caching:
+  enabled: true
+  backend: "redis"
+  redis:
+    host: "${REDIS_HOST}"
+    port: 6379
+    password: "${REDIS_PASSWORD}"
+
+otel:
+  enabled: true
+  otlp_endpoint: "${OTEL_ENDPOINT}"
+  service_name: "fast-agent"
+  environment: "production"
+
+performance:
+  max_concurrent_requests: 50
+  request_timeout: 60
+  rate_limit:
+    requests_per_minute: 1000
+
+template_vars:
+  environment: "production"
+  api_version: "v2.1"
+```
+
+### Secrets File
+
+```yaml
+# fastagent.secrets.yaml (not committed to version control)
+openai:
+  api_key: "sk-..."
+
+anthropic:
+  api_key: "sk-ant-..."
+
+mcp:
+  brave_search:
+    env:
+      BRAVE_API_KEY: "sk-..."
+
+caching:
+  redis:
+    password: "your_redis_password"
+
+template_vars:
+  api_secret: "your_api_secret"
+```
+
+## Configuration Validation
+
+### Using fast-agent check
+
+```bash
+# Validate configuration
+fast-agent check
+
+# Show configuration
+fast-agent check show
+
+# Show secrets
+fast-agent check show --secrets
+
+# Test specific providers
+fast-agent check --provider openai
+fast-agent check --provider anthropic
+
+# Test MCP servers
+fast-agent check --servers
+fast-agent check --server brave_search
+```
+
+### Configuration Schema
+
+The configuration follows this schema:
+
+```yaml
+# Root level
+default_model: string
+auto_sampling: boolean
+execution_engine: string
+
+# Provider configurations
+<provider_name>:
+  api_key: string
+  base_url: string (optional)
+  # Provider-specific fields...
+
+# MCP server configurations
+mcp:
+  <server_name>:
+    command: string (for STDIO)
+    args: list[string] (for STDIO)
+    env: dict (for STDIO)
+    transport: string (for HTTP/SSE)
+    url: string (for HTTP/SSE)
+    headers: dict (for HTTP/SSE)
+    # Other server-specific fields...
+
+# Logging configuration
+logging:
+  level: string
+  format: string
+  file: string (optional)
+  # Other logging fields...
+
+# Caching configuration
+caching:
+  enabled: boolean
+  ttl: integer
+  max_size: integer
+  backend: string
+  # Backend-specific fields...
+
+# OpenTelemetry configuration
+otel:
+  enabled: boolean
+  otlp_endpoint: string
+  # Other telemetry fields...
+
+# Performance configuration
+performance:
+  max_concurrent_requests: integer
+  request_timeout: integer
+  # Other performance fields...
+
+# Security configuration
+security:
+  require_authentication: boolean
+  # Other security fields...
+
+# Template variables
+template_vars:
+  # Custom key-value pairs...
+```
+
+## Best Practices
+
+### Security
+
+1. **Use secrets file** - Store sensitive data in `fastagent.secrets.yaml`
+2. **Use environment variables** - Reference secrets via environment variables
+3. **Don't commit secrets** - Add `fastagent.secrets.yaml` to `.gitignore`
+4. **Rotate keys regularly** - Implement key rotation policies
+
+### Organization
+
+1. **Use descriptive names** - Make configuration sections clear
+2. **Group related settings** - Organize configuration logically
+3. **Document custom settings** - Add comments for non-standard configurations
+4. **Version control config** - Keep non-sensitive configuration in version control
+
+### Performance
+
+1. **Set appropriate limits** - Configure request limits based on your needs
+2. **Enable caching** - Use caching for frequently accessed data
+3. **Monitor usage** - Set up monitoring for configuration effectiveness
+4. **Optimize for your use case** - Adjust settings based on your specific requirements
+
+---
+
+*Source: [https://fast-agent.ai/ref/config_file/](https://fast-agent.ai/ref/config_file/)*

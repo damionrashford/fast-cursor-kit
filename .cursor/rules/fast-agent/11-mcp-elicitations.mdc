@@ -1,0 +1,491 @@
+---
+description: Quick start guide for MCP Elicitation features and user interaction
+globs: ["**/*.py", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Quick Start: MCP Elicitations
+
+In this quick start, we'll demonstrate **fast-agent**'s [MCP Elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) features.
+
+Elicitations allow MCP Servers to request additional information from Users whilst they are running.
+
+The demo comprises three MCP Servers and three **fast-agent** programs:
+
+- An interactive demonstration showing different types of Forms, Fields and Validation.
+- A demonstration of an Elicitation made during a Tool Call.
+- An example of using a custom Elicitation handler.
+
+This quick start gives provides you with a complete MCP Client and Server solution for developing and deploying Elicitations.
+
+## Setup
+
+Make sure you have the `uv` [package manager](https://docs.astral.sh/uv/) installed, and open a terminal window. Then:
+
+**Linux/macOS:**
+```bash
+# create, and change to a new directory
+mkdir fast-agent && cd fast-agent
+
+# create and activate a python environment
+uv venv
+source .venv/bin/activate
+
+# setup fast-agent
+uv pip install fast-agent-mcp
+
+# setup the elicitations demo
+fast-agent quickstart elicitations
+
+# go the demo folder
+cd elicitations
+```
+
+**Windows:**
+```bash
+# create, and change to a new directory
+md fast-agent | cd
+
+# create and activate a python environment
+uv venv
+.venv\Scripts\activate
+
+# setup fast-agent
+uv pip install fast-agent-mcp
+
+# setup the elicitations demo
+fast-agent quickstart elicitations
+
+# go the demo folder
+cd elicitations
+```
+
+You are now ready to start the demos.
+
+## Elicitation Requests and Forms
+
+The Interactive Forms demo showcases all of the Elicitation data types and validations. Start the interactive form demo with:
+
+```bash
+uv run forms_demo.py
+```
+
+This demonstration displays 4 different elicitation forms in sequence.
+
+Note that the forms:
+
+- Can be navigated with the `Tab` or Arrow Keys (`→` `←`)
+- Have real time Validation
+- Can be Cancelled with the Escape key
+- Uses multiline text input for long fields
+- Identify the Agent and MCP Server that produced the request.
+
+The `Cancel All` option cancels the Elicitation Request, and automatically cancels future requests to avoid unwanted interruptions from badly behaving Servers.
+
+For MCP Server developers, the form is fast and easy to navigate to facilitating iterative development.
+
+The `elicitation_forms_server.py` file includes examples of all field types and validations: `Numbers`, `Booleans`, `Enums` and `Strings`.
+
+It also supports the formats specified in the [schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/b98f9805e963af7f67f158bdfa760078be4675a3/schema/2025-06-18/schema.ts#L1335-L1342): `Email`, `Uri`, `Date` and `Date/Time`.
+
+## Tool Call
+
+The Tool Call demo demonstrates an Elicitation being conducted during an MCP Tool Call. This also showcases a couple of **fast-agent** features:
+
+- The `passthrough` model supports testing without an LLM. You can read more about Internal Models [here](https://fast-agent.ai/models/internal_models/).
+- Calling a tool by sending a `***CALL_TOOL` message, that enables an Agent to directly call an MCP Server Tool with specific arguments.
+
+Start the tool call demo with:
+
+```bash
+uv run tool_call_demo.py
+```
+
+This demo shows how elicitations can be triggered during tool execution, allowing for dynamic user input based on the context of the tool call.
+
+## Custom Elicitation Handler
+
+The Custom Handler demo shows how to implement your own elicitation handling logic. This is useful for:
+
+- Custom UI implementations
+- Integration with existing applications
+- Specialized validation logic
+- Automated responses
+
+Start the custom handler demo with:
+
+```bash
+uv run custom_handler_demo.py
+```
+
+## Elicitation Types and Features
+
+### Form Types
+
+#### Basic Forms
+
+Simple forms with single fields:
+
+```python
+@fast.agent(
+    name="basic_form_agent",
+    model="passthrough",
+    servers=["elicitation_forms"]
+)
+
+# Trigger a basic form
+await agent.send("***CALL_TOOL show_basic_form {}")
+```
+
+#### Complex Forms
+
+Multi-field forms with validation:
+
+```python
+@fast.agent(
+    name="complex_form_agent",
+    model="passthrough",
+    servers=["elicitation_forms"]
+)
+
+# Trigger a complex form
+await agent.send("***CALL_TOOL show_complex_form {}")
+```
+
+### Field Types
+
+#### Text Fields
+
+```python
+# Single line text
+text_field = {
+    "type": "string",
+    "description": "Enter your name",
+    "required": True
+}
+
+# Multi-line text
+multiline_field = {
+    "type": "string",
+    "description": "Enter a detailed description",
+    "multiline": True,
+    "maxLength": 1000
+}
+```
+
+#### Number Fields
+
+```python
+# Integer
+integer_field = {
+    "type": "number",
+    "description": "Enter your age",
+    "minimum": 0,
+    "maximum": 120
+}
+
+# Float
+float_field = {
+    "type": "number",
+    "description": "Enter a decimal value",
+    "minimum": 0.0,
+    "maximum": 100.0,
+    "step": 0.1
+}
+```
+
+#### Boolean Fields
+
+```python
+boolean_field = {
+    "type": "boolean",
+    "description": "Do you agree to the terms?",
+    "default": False
+}
+```
+
+#### Enum Fields
+
+```python
+enum_field = {
+    "type": "string",
+    "description": "Select your preferred option",
+    "enum": ["option1", "option2", "option3"],
+    "default": "option1"
+}
+```
+
+#### Specialized Formats
+
+```python
+# Email
+email_field = {
+    "type": "string",
+    "description": "Enter your email address",
+    "format": "email"
+}
+
+# URI
+uri_field = {
+    "type": "string",
+    "description": "Enter a URL",
+    "format": "uri"
+}
+
+# Date
+date_field = {
+    "type": "string",
+    "description": "Select a date",
+    "format": "date"
+}
+
+# Date/Time
+datetime_field = {
+    "type": "string",
+    "description": "Select date and time",
+    "format": "date-time"
+}
+```
+
+### Validation
+
+#### Real-time Validation
+
+Forms support real-time validation as users type:
+
+```python
+# Custom validation function
+def validate_email(email: str) -> bool:
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+# Field with validation
+email_field = {
+    "type": "string",
+    "description": "Enter your email",
+    "format": "email",
+    "validation": validate_email
+}
+```
+
+#### Required Fields
+
+```python
+required_field = {
+    "type": "string",
+    "description": "This field is required",
+    "required": True
+}
+```
+
+#### Conditional Fields
+
+Fields can be shown/hidden based on other field values:
+
+```python
+conditional_field = {
+    "type": "string",
+    "description": "Additional information",
+    "condition": {
+        "field": "show_additional",
+        "value": True
+    }
+}
+```
+
+## Custom Elicitation Handlers
+
+### Basic Handler
+
+```python
+from mcp_agent.core.elicitation import ElicitationHandler
+
+class CustomElicitationHandler(ElicitationHandler):
+    async def handle_elicitation(self, request):
+        """Handle elicitation requests"""
+        print(f"Elicitation request: {request}")
+        
+        # Custom logic here
+        if request.form.title == "User Preferences":
+            return await self.handle_preferences(request)
+        else:
+            return await self.handle_generic(request)
+    
+    async def handle_preferences(self, request):
+        """Handle user preferences form"""
+        # Custom logic for preferences
+        return {"theme": "dark", "language": "en"}
+    
+    async def handle_generic(self, request):
+        """Handle generic forms"""
+        # Default handling
+        return {"default": "value"}
+```
+
+### Advanced Handler
+
+```python
+class AdvancedElicitationHandler(ElicitationHandler):
+    def __init__(self):
+        self.response_cache = {}
+        self.validation_rules = {}
+    
+    async def handle_elicitation(self, request):
+        """Advanced elicitation handling"""
+        
+        # Check cache
+        if request.id in self.response_cache:
+            return self.response_cache[request.id]
+        
+        # Apply custom validation
+        if not await self.validate_request(request):
+            raise ValueError("Invalid elicitation request")
+        
+        # Process based on form type
+        response = await self.process_form(request)
+        
+        # Cache response
+        self.response_cache[request.id] = response
+        
+        return response
+    
+    async def validate_request(self, request):
+        """Custom validation logic"""
+        # Implement custom validation
+        return True
+    
+    async def process_form(self, request):
+        """Process different form types"""
+        form_type = request.form.title.lower()
+        
+        if "preferences" in form_type:
+            return await self.process_preferences(request)
+        elif "settings" in form_type:
+            return await self.process_settings(request)
+        else:
+            return await self.process_generic(request)
+```
+
+## Integration with Agents
+
+### Using Elicitations in Agents
+
+```python
+@fast.agent(
+    name="elicitation_agent",
+    model="passthrough",
+    servers=["elicitation_forms"],
+    human_input=True  # Enable human input
+)
+
+async def main():
+    async with fast.run() as agent:
+        # Agent can now request user input
+        response = await agent.send("Please provide your preferences")
+        
+        # The agent will show an elicitation form if needed
+        print(f"Response: {response}")
+```
+
+### Elicitation in Workflows
+
+```python
+@fast.agent("preference_collector", "Collect user preferences")
+@fast.agent("preference_processor", "Process collected preferences")
+
+@fast.chain(
+    name="preference_workflow",
+    sequence=["preference_collector", "preference_processor"]
+)
+
+async def main():
+    async with fast.run() as agent:
+        # Run the workflow with elicitations
+        result = await agent.preference_workflow("Set up user preferences")
+        print(f"Workflow result: {result}")
+```
+
+## Best Practices
+
+### Form Design
+
+1. **Keep forms simple** - Don't overwhelm users with too many fields
+2. **Use clear descriptions** - Explain what each field is for
+3. **Provide defaults** - Set sensible default values when possible
+4. **Group related fields** - Organize fields logically
+
+### Validation
+
+1. **Validate early** - Check input as users type
+2. **Provide helpful messages** - Explain validation errors clearly
+3. **Use appropriate formats** - Leverage built-in format validation
+4. **Test edge cases** - Ensure validation handles all scenarios
+
+### User Experience
+
+1. **Make navigation easy** - Support keyboard navigation
+2. **Allow cancellation** - Users should be able to cancel forms
+3. **Show progress** - Indicate form completion status
+4. **Handle errors gracefully** - Provide clear error messages
+
+### Performance
+
+1. **Cache responses** - Avoid re-asking for the same information
+2. **Minimize form size** - Only ask for necessary information
+3. **Use conditional fields** - Show/hide fields based on context
+4. **Optimize validation** - Keep validation logic efficient
+
+## Troubleshooting
+
+### Common Issues
+
+#### Forms Not Displaying
+
+```python
+# Check if human input is enabled
+@fast.agent(
+    name="test_agent",
+    human_input=True  # This is required for elicitations
+)
+```
+
+#### Validation Errors
+
+```python
+# Check validation rules
+field = {
+    "type": "string",
+    "description": "Test field",
+    "validation": lambda x: len(x) > 0  # Ensure validation function is correct
+}
+```
+
+#### Handler Not Working
+
+```python
+# Ensure handler is properly registered
+handler = CustomElicitationHandler()
+@fast.agent(
+    name="test_agent",
+    elicitation_handler=handler
+)
+```
+
+### Debug Mode
+
+Enable debug logging for elicitations:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "DEBUG"
+  elicitations:
+    enabled: true
+    show_requests: true
+    show_responses: true
+```
+
+---
+
+*Source: [https://fast-agent.ai/mcp/elicitations/](https://fast-agent.ai/mcp/elicitations/)*

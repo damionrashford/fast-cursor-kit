@@ -1,0 +1,572 @@
+---
+description: Programmatic API reference for FastAgent and AgentApp classes
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# fast-agent Class Reference
+
+This document provides detailed reference information for programmatically using the `FastAgent` class, which is the core class for creating and running agent applications.
+
+## FastAgent Class
+
+### Constructor
+
+```python
+FastAgent(name: str, config_path: str | None = None, ignore_unknown_args: bool = False, parse_cli_args: bool = True)
+```
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| name | str | (required) | Name of the application |
+| config_path | str \| None | None | Optional path to config file. If not provided, config is loaded from default locations |
+| ignore_unknown_args | bool | False | Whether to ignore unknown command line arguments when `parse_cli_args` is True |
+| parse_cli_args | bool | True | Whether to parse command line arguments. Set to `False` when embedding FastAgent in frameworks like FastAPI/Uvicorn that handle their own argument parsing |
+
+### Decorator Methods
+
+The `FastAgent` class provides several decorators for creating agents and workflows:
+
+| Decorator | Description |
+|-----------|-------------|
+| @fast.agent() | Create a basic agent |
+| @fast.chain() | Create a chain workflow |
+| @fast.router() | Create a router workflow |
+| @fast.parallel() | Create a parallel workflow |
+| @fast.evaluator_optimizer() | Create an evaluator-optimizer workflow |
+| @fast.orchestrator() | Create an orchestrator workflow |
+
+See [Defining Agents](https://fast-agent.ai/agents/defining/) for detailed usage of these decorators.
+
+### Methods
+
+#### run()
+
+```python
+async with fast.run() as agent:
+    # Use agent here
+```
+
+An async context manager that initializes all registered agents and returns an `AgentApp` instance that can be used to interact with the agents.
+
+#### start_server()
+
+```python
+await fast.start_server(transport: str = "sse", host: str = "0.0.0.0", port: int = 8000, server_name: Optional[str] = None, server_description: Optional[str] = None)
+```
+
+Starts the application as an MCP server.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| transport | str | "sse" | Transport protocol to use ("stdio" or "sse") |
+| host | str | "0.0.0.0" | Host address for the server when using SSE |
+| port | int | 8000 | Port for the server when using SSE |
+| server_name | Optional[str] | None | Optional custom name for the MCP server |
+| server_description | Optional[str] | None | Optional description for the MCP server |
+
+#### main()
+
+```python
+await fast.main()
+```
+
+Helper method for checking if server mode was requested. Returns `True` if the `--server` flag is set, `False` otherwise.
+
+## AgentApp Class
+
+The `AgentApp` class is returned from `fast.run()` and provides access to all registered agents and their capabilities.
+
+### Accessing Agents
+
+There are two ways to access agents in the `AgentApp`:
+
+```python
+# Attribute access
+response = await agent.agent_name.send("Hello")
+
+# Dictionary access
+response = await agent["agent_name"].send("Hello")
+```
+
+### Methods
+
+#### send()
+
+```python
+await agent.send(message: Union[str, PromptMessage, PromptMessageMultipart], agent_name: Optional[str] = None) -> str
+```
+
+Send a message to the specified agent (or the default agent if not specified).
+
+#### apply_prompt()
+
+```python
+await agent.apply_prompt(prompt_name: str, arguments: Dict[str, str] | None = None, agent_name: str | None = None) -> str
+```
+
+Apply a prompt template to an agent (default agent if not specified).
+
+#### with_resource()
+
+```python
+await agent.with_resource(resource_name: str, agent_name: str | None = None) -> str
+```
+
+Apply a resource to an agent (default agent if not specified).
+
+#### interactive()
+
+```python
+await agent.interactive(agent_name: str | None = None) -> None
+```
+
+Start an interactive session with the specified agent (or default agent if not specified).
+
+#### prompt()
+
+```python
+await agent.prompt(agent_name: str | None = None) -> None
+```
+
+Start an interactive prompt session with the specified agent.
+
+## Agent Class
+
+Individual agents provide methods for interaction and state management.
+
+### Methods
+
+#### send()
+
+```python
+response: str = await agent.send(message: Union[str, PromptMessage, PromptMessageMultipart]) -> str
+```
+
+Send a message to the agent and return the response as a string.
+
+#### generate()
+
+```python
+response: PromptMessageMultipart = await agent.generate(messages: List[PromptMessageMultipart]) -> PromptMessageMultipart
+```
+
+Generate a response from a list of messages, returning the full multipart response.
+
+#### structured()
+
+```python
+result: T = await agent.structured(message: str, model: Type[T], *args) -> T
+```
+
+Send a message and get a structured response using a Pydantic model.
+
+#### apply_prompt()
+
+```python
+response: str = await agent.apply_prompt(prompt_name: str, arguments: Dict[str, str] | None = None) -> str
+```
+
+Apply a prompt template to the agent.
+
+#### with_resource()
+
+```python
+response: str = await agent.with_resource(resource_name: str) -> str
+```
+
+Apply a resource to the agent.
+
+#### interactive()
+
+```python
+await agent.interactive() -> None
+```
+
+Start an interactive session with the agent.
+
+### Properties
+
+#### message_history
+
+```python
+history: List[PromptMessageMultipart] = agent.message_history
+```
+
+Get the conversation history for the agent.
+
+#### name
+
+```python
+name: str = agent.name
+```
+
+Get the name of the agent.
+
+#### model
+
+```python
+model: str = agent.model
+```
+
+Get the model being used by the agent.
+
+## RequestParams Class
+
+Configuration for agent request parameters.
+
+### Constructor
+
+```python
+RequestParams(
+    max_tokens: int = 2048,
+    temperature: float | None = None,
+    use_history: bool = True,
+    max_iterations: int = 20,
+    parallel_tool_calls: bool = True,
+    response_format: Any = None,
+    template_vars: Dict[str, Any] = {},
+    model: str | None = None
+)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| max_tokens | int | 2048 | Maximum number of tokens to generate |
+| temperature | float \| None | None | Sampling temperature (0.0 to 2.0) |
+| use_history | bool | True | Whether to maintain conversation history |
+| max_iterations | int | 20 | Maximum number of tool call iterations |
+| parallel_tool_calls | bool | True | Whether to allow parallel tool calls |
+| response_format | Any | None | Response format for structured outputs |
+| template_vars | Dict[str, Any] | {} | Template variables for dynamic content |
+| model | str \| None | None | Model to use (can only be set at creation) |
+
+## PromptMessageMultipart Class
+
+Represents a multipart message with multiple content sections.
+
+### Constructor
+
+```python
+PromptMessageMultipart(
+    role: str,
+    content: List[Union[TextContent, ImageContent, Resource, EmbeddedResource]],
+    tool_calls: List[ToolCall] | None = None,
+    tool_results: List[ToolResult] | None = None
+)
+```
+
+### Methods
+
+#### last_text()
+
+```python
+text: str = message.last_text()
+```
+
+Get the last text response (usually the Assistant message without Tool Call/Response information).
+
+#### first_text()
+
+```python
+text: str = message.first_text()
+```
+
+Get the first text content if multiple text blocks exist.
+
+#### all_text()
+
+```python
+text: str = message.all_text()
+```
+
+Combine all text content in the response (including Tool Call/Response information).
+
+### Properties
+
+#### content
+
+```python
+content: List[Union[TextContent, ImageContent, Resource, EmbeddedResource]] = message.content
+```
+
+Direct access to the full list of content parts.
+
+#### role
+
+```python
+role: str = message.role
+```
+
+The role of the message (user, assistant, system).
+
+## Usage Examples
+
+### Basic Agent Creation
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+# Create the application
+fast = FastAgent("My Agent App")
+
+# Define an agent
+@fast.agent(
+    name="my_agent",
+    instruction="You are a helpful assistant",
+    model="haiku"
+)
+async def main():
+    async with fast.run() as agent:
+        # Send a message
+        response = await agent.my_agent.send("Hello!")
+        print(response)
+        
+        # Start interactive session
+        await agent.my_agent.interactive()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Multiple Agents
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Multi Agent App")
+
+@fast.agent("researcher", "Research topics thoroughly", model="gpt-4o")
+@fast.agent("writer", "Write content based on research", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        # Use different agents
+        research = await agent.researcher.send("Research AI trends")
+        content = await agent.writer.send(f"Write about: {research}")
+        
+        print(f"Research: {research}")
+        print(f"Content: {content}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Workflow with Chain
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Workflow App")
+
+@fast.agent("researcher", "Research topics", model="gpt-4o")
+@fast.agent("writer", "Write content", model="haiku")
+@fast.chain("content_pipeline", sequence=["researcher", "writer"])
+async def main():
+    async with fast.run() as agent:
+        # Use the chain workflow
+        result = await agent.content_pipeline.send("Create content about AI")
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Server Mode
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("Server App")
+
+@fast.agent("api_agent", "You are an API assistant", model="haiku")
+async def main():
+    # Start as MCP server
+    await fast.start_server(
+        transport="http",
+        host="0.0.0.0",
+        port=8080,
+        server_name="My API Server",
+        server_description="Provides API access to my agent"
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Advanced Usage with RequestParams
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+from mcp_agent.core.request_params import RequestParams
+
+fast = FastAgent("Advanced App")
+
+@fast.agent(
+    "advanced_agent",
+    "You are an advanced assistant",
+    model="gpt-4o",
+    request_params=RequestParams(
+        temperature=0.7,
+        max_tokens=1024,
+        max_iterations=10
+    )
+)
+async def main():
+    async with fast.run() as agent:
+        response = await agent.advanced_agent.send("Generate creative content")
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Structured Outputs
+
+```python
+import asyncio
+from pydantic import BaseModel
+from typing import List
+from mcp_agent.core.fastagent import FastAgent
+
+class AnalysisResult(BaseModel):
+    summary: str
+    key_points: List[str]
+    confidence: float
+
+fast = FastAgent("Structured App")
+
+@fast.agent("analyzer", "Analyze content and provide structured results", model="gpt-4o")
+async def main():
+    async with fast.run() as agent:
+        result: AnalysisResult = await agent.analyzer.structured(
+            "Analyze the impact of AI on healthcare",
+            AnalysisResult
+        )
+        
+        print(f"Summary: {result.summary}")
+        print(f"Key points: {result.key_points}")
+        print(f"Confidence: {result.confidence}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Working with Message History
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+fast = FastAgent("History App")
+
+@fast.agent("chat_agent", "You are a chat assistant", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        # Send some messages
+        await agent.chat_agent.send("Hello")
+        await agent.chat_agent.send("How are you?")
+        
+        # Access history
+        history = agent.chat_agent.message_history
+        print(f"Conversation has {len(history)} messages")
+        
+        # Transfer history to another agent
+        await agent.chat_agent.generate(history)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Custom Configuration
+
+```python
+import asyncio
+from mcp_agent.core.fastagent import FastAgent
+
+# Create with custom config
+fast = FastAgent(
+    name="Custom App",
+    config_path="./custom-config.yaml",
+    parse_cli_args=False  # Disable CLI parsing
+)
+
+@fast.agent("custom_agent", "Custom assistant", model="haiku")
+async def main():
+    async with fast.run() as agent:
+        response = await agent.custom_agent.send("Hello")
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Error Handling
+
+### Common Exceptions
+
+```python
+from mcp_agent.core.exceptions import (
+    AgentError,
+    ModelError,
+    ToolCallError,
+    ConfigurationError
+)
+
+try:
+    response = await agent.send("Hello")
+except AgentError as e:
+    print(f"Agent error: {e}")
+except ModelError as e:
+    print(f"Model error: {e}")
+except ToolCallError as e:
+    print(f"Tool call error: {e}")
+except ConfigurationError as e:
+    print(f"Configuration error: {e}")
+```
+
+### Validation Errors
+
+```python
+from pydantic import ValidationError
+
+try:
+    result = await agent.structured("Analyze this", MyModel)
+except ValidationError as e:
+    print(f"Validation error: {e}")
+```
+
+## Best Practices
+
+### Agent Design
+
+1. **Use descriptive names** - Make agent names clear and meaningful
+2. **Set appropriate instructions** - Provide clear, specific instructions
+3. **Choose suitable models** - Use appropriate models for different tasks
+4. **Handle errors gracefully** - Implement proper error handling
+
+### Performance
+
+1. **Use appropriate request parameters** - Set reasonable limits and temperatures
+2. **Manage conversation history** - Clean up history when not needed
+3. **Use structured outputs** - Leverage Pydantic models for predictable responses
+4. **Cache responses** - Implement caching for repeated queries
+
+### Security
+
+1. **Validate inputs** - Check all user inputs before processing
+2. **Use secure configuration** - Store sensitive data in environment variables
+3. **Implement access control** - Restrict agent access as needed
+4. **Monitor usage** - Track agent usage and performance
+
+---
+
+*Source: [https://fast-agent.ai/ref/class_reference/](https://fast-agent.ai/ref/class_reference/)*

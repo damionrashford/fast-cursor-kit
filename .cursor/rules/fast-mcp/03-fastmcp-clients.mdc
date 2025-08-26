@@ -1,0 +1,524 @@
+# FastMCP Client Implementation
+
+FastMCP clients connect to MCP servers and interact with their tools, resources, and prompts. This guide covers building and using FastMCP clients.
+
+## Basic Client Setup
+
+Create a FastMCP client to connect to an MCP server:
+
+```python
+from fastmcp import Client
+
+async with Client("my_server.py") as client:
+    # Interact with the server
+    tools = await client.list_tools()
+    print(f"Available tools: {tools}")
+```
+
+## Transports
+
+FastMCP supports multiple transport protocols for connecting to servers.
+
+### STDIO Transport
+
+Connect to a local server using standard input/output:
+
+```python
+from fastmcp import Client
+
+# Connect to a local Python server
+async with Client("my_server.py") as client:
+    result = await client.call_tool("add", {"a": 2, "b": 3})
+    print(result.data)  # 5
+```
+
+### HTTP Transport
+
+Connect to a remote HTTP server:
+
+```python
+from fastmcp import Client, HTTPTransport
+
+# Connect to HTTP server
+transport = HTTPTransport(
+    url="http://localhost:8000/mcp",
+    headers={"Authorization": "Bearer your-token"}
+)
+
+async with Client(transport) as client:
+    result = await client.call_tool("search", {"query": "test"})
+    print(result.data)
+```
+
+### WebSocket Transport
+
+Connect to a WebSocket server:
+
+```python
+from fastmcp import Client, WebSocketTransport
+
+# Connect to WebSocket server
+transport = WebSocketTransport(
+    url="ws://localhost:8000/ws",
+    headers={"Authorization": "Bearer your-token"}
+)
+
+async with Client(transport) as client:
+    result = await client.call_tool("process_data", {"data": "test"})
+    print(result.data)
+```
+
+### Custom Transport Configuration
+
+Configure transports with custom settings:
+
+```python
+from fastmcp import Client, HTTPTransport
+
+# Custom HTTP configuration
+transport = HTTPTransport(
+    url="https://api.example.com/mcp",
+    headers={
+        "Authorization": "Bearer your-token",
+        "X-Custom-Header": "value"
+    },
+    timeout=30.0,
+    verify_ssl=True
+)
+
+async with Client(transport) as client:
+    # Use the client
+    pass
+```
+
+## Tool Operations
+
+Tools are server-side functions that clients can execute.
+
+### Listing Tools
+
+Discover available tools on the server:
+
+```python
+async with Client("my_server.py") as client:
+    tools = await client.list_tools()
+    
+    for tool in tools:
+        print(f"Tool: {tool.name}")
+        print(f"Description: {tool.description}")
+        print(f"Parameters: {tool.inputSchema}")
+```
+
+### Calling Tools
+
+Execute tools with arguments:
+
+```python
+async with Client("my_server.py") as client:
+    # Simple tool call
+    result = await client.call_tool("add", {"a": 5, "b": 3})
+    print(result.data)  # 8
+    
+    # Complex tool call
+    result = await client.call_tool("search_database", {
+        "query": "python",
+        "filters": ["language", "framework"],
+        "limit": 10
+    })
+    print(result.data)
+```
+
+### Tool Validation
+
+Validate tool calls before execution:
+
+```python
+async with Client("my_server.py") as client:
+    tools = await client.list_tools()
+    
+    # Find a specific tool
+    add_tool = next(tool for tool in tools if tool.name == "add")
+    
+    # Validate arguments
+    if add_tool.inputSchema:
+        # Validate against schema
+        pass
+    
+    # Call the tool
+    result = await client.call_tool("add", {"a": 2, "b": 3})
+```
+
+### Error Handling
+
+Handle tool call errors gracefully:
+
+```python
+from fastmcp import ClientError
+
+async with Client("my_server.py") as client:
+    try:
+        result = await client.call_tool("divide", {"a": 10, "b": 0})
+        print(result.data)
+    except ClientError as e:
+        print(f"Tool call failed: {e.message}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+```
+
+## Resource Operations
+
+Resources are data sources that clients can read.
+
+### Listing Resources
+
+Discover available resources:
+
+```python
+async with Client("my_server.py") as client:
+    resources = await client.list_resources()
+    
+    for resource in resources:
+        print(f"Resource: {resource.uri}")
+        print(f"Description: {resource.description}")
+        print(f"MIME Type: {resource.mimeType}")
+```
+
+### Reading Resources
+
+Read resource content:
+
+```python
+async with Client("my_server.py") as client:
+    # Read a static resource
+    content = await client.read_resource("file:///config/settings.json")
+    print(content[0].text)
+    
+    # Read a parameterized resource
+    content = await client.read_resource("user://profile/123")
+    print(content[0].text)
+```
+
+### Resource Caching
+
+Cache resources for better performance:
+
+```python
+from fastmcp import Client, ResourceCache
+
+# Create a cache
+cache = ResourceCache(ttl=300)  # 5 minutes
+
+async with Client("my_server.py", cache=cache) as client:
+    # First read - fetches from server
+    content1 = await client.read_resource("file:///config/settings.json")
+    
+    # Second read - uses cache
+    content2 = await client.read_resource("file:///config/settings.json")
+    
+    # Both return the same content, but second is faster
+```
+
+## Prompt Operations
+
+Prompts are reusable message templates.
+
+### Listing Prompts
+
+Discover available prompts:
+
+```python
+async with Client("my_server.py") as client:
+    prompts = await client.list_prompts()
+    
+    for prompt in prompts:
+        print(f"Prompt: {prompt.name}")
+        print(f"Description: {prompt.description}")
+        print(f"Arguments: {prompt.arguments}")
+```
+
+### Using Prompts
+
+Get rendered prompts with arguments:
+
+```python
+async with Client("my_server.py") as client:
+    # Get a simple prompt
+    messages = await client.get_prompt("greeting", {"name": "Alice"})
+    print(messages.messages)
+    
+    # Get a complex prompt
+    messages = await client.get_prompt("data_analysis", {
+        "data": [1, 2, 3, 4, 5],
+        "analysis_type": "statistical"
+    })
+    print(messages.messages)
+```
+
+### Prompt Templates
+
+Work with prompt templates:
+
+```python
+async with Client("my_server.py") as client:
+    # Get prompt template
+    template = await client.get_prompt_template("email_template")
+    
+    # Render with different arguments
+    messages1 = await client.get_prompt("email_template", {
+        "recipient": "user@example.com",
+        "subject": "Welcome",
+        "content": "Welcome to our service!"
+    })
+    
+    messages2 = await client.get_prompt("email_template", {
+        "recipient": "admin@example.com",
+        "subject": "Report",
+        "content": "Monthly report attached."
+    })
+```
+
+## Advanced Client Features
+
+### Authentication
+
+Authenticate with servers:
+
+```python
+from fastmcp import Client, BearerAuthProvider
+
+# Bearer token authentication
+auth_provider = BearerAuthProvider(token="your-secret-token")
+
+async with Client("my_server.py", auth_provider=auth_provider) as client:
+    result = await client.call_tool("protected_function", {})
+    print(result.data)
+```
+
+### Connection Management
+
+Manage client connections:
+
+```python
+from fastmcp import Client
+
+# Reuse connection
+client = Client("my_server.py")
+
+async with client:
+    # First operation
+    tools = await client.list_tools()
+    
+    # Second operation - reuses connection
+    result = await client.call_tool("add", {"a": 2, "b": 3})
+    
+    # Connection automatically closed at end of context
+```
+
+### Batch Operations
+
+Perform multiple operations efficiently:
+
+```python
+async with Client("my_server.py") as client:
+    # Batch tool calls
+    results = await asyncio.gather(
+        client.call_tool("add", {"a": 1, "b": 2}),
+        client.call_tool("multiply", {"a": 3, "b": 4}),
+        client.call_tool("divide", {"a": 10, "b": 2})
+    )
+    
+    for result in results:
+        print(result.data)
+```
+
+### Logging and Monitoring
+
+Monitor client operations:
+
+```python
+import logging
+from fastmcp import Client
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
+async with Client("my_server.py") as client:
+    # Operations will be logged
+    result = await client.call_tool("add", {"a": 2, "b": 3})
+    print(result.data)
+```
+
+## Client Patterns
+
+### Context Manager Pattern
+
+Use context managers for automatic cleanup:
+
+```python
+async def process_data():
+    async with Client("my_server.py") as client:
+        # Process data
+        result = await client.call_tool("process", {"data": "input"})
+        return result.data
+    # Connection automatically closed
+```
+
+### Connection Reuse
+
+Reuse connections for multiple operations:
+
+```python
+async def multiple_operations():
+    client = Client("my_server.py")
+    
+    async with client:
+        # Operation 1
+        tools = await client.list_tools()
+        
+        # Operation 2
+        result1 = await client.call_tool("operation1", {})
+        
+        # Operation 3
+        result2 = await client.call_tool("operation2", {})
+        
+        return [result1.data, result2.data]
+```
+
+### Error Recovery
+
+Implement error recovery patterns:
+
+```python
+from fastmcp import ClientError
+import asyncio
+
+async def resilient_operation(max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            async with Client("my_server.py") as client:
+                result = await client.call_tool("unreliable_operation", {})
+                return result.data
+        except ClientError as e:
+            if attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+```
+
+## Testing with Mock Clients
+
+Test your code with mock clients:
+
+```python
+from fastmcp import MockClient
+
+# Create a mock client
+mock_client = MockClient()
+
+# Add mock responses
+mock_client.add_tool_response("add", {"a": 2, "b": 3}, 5)
+mock_client.add_resource_response("config", "config.json", '{"setting": "value"}')
+
+# Use in tests
+async def test_my_function():
+    async with mock_client as client:
+        result = await client.call_tool("add", {"a": 2, "b": 3})
+        assert result.data == 5
+```
+
+## Best Practices
+
+### Connection Management
+
+1. **Use context managers** for automatic cleanup
+2. **Reuse connections** when possible
+3. **Handle connection errors** gracefully
+4. **Implement retry logic** for transient failures
+
+### Error Handling
+
+1. **Catch specific exceptions** (ClientError vs general Exception)
+2. **Implement proper logging** for debugging
+3. **Use exponential backoff** for retries
+4. **Validate responses** before using data
+
+### Performance
+
+1. **Use connection pooling** for multiple operations
+2. **Cache resources** when appropriate
+3. **Batch operations** when possible
+4. **Monitor response times** and optimize
+
+### Security
+
+1. **Use secure transports** (HTTPS, WSS)
+2. **Implement proper authentication**
+3. **Validate server certificates**
+4. **Sanitize inputs** before sending to servers
+
+## Integration Examples
+
+### FastAPI Integration
+
+```python
+from fastapi import FastAPI
+from fastmcp import Client
+
+app = FastAPI()
+
+@app.post("/process")
+async def process_data(data: dict):
+    async with Client("my_server.py") as client:
+        result = await client.call_tool("process_data", data)
+        return {"result": result.data}
+```
+
+### Background Task Integration
+
+```python
+from fastmcp import Client
+import asyncio
+
+async def background_processing():
+    async with Client("my_server.py") as client:
+        while True:
+            try:
+                result = await client.call_tool("process_queue", {})
+                print(f"Processed: {result.data}")
+            except Exception as e:
+                print(f"Error: {e}")
+            
+            await asyncio.sleep(60)  # Wait 1 minute
+
+# Start background task
+asyncio.create_task(background_processing())
+```
+
+### Configuration Management
+
+```python
+import os
+from fastmcp import Client, HTTPTransport
+
+def create_client():
+    # Get configuration from environment
+    server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
+    auth_token = os.getenv("MCP_AUTH_TOKEN")
+    
+    if server_url.startswith("http"):
+        # HTTP transport
+        transport = HTTPTransport(
+            url=server_url,
+            headers={"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+        )
+        return Client(transport)
+    else:
+        # STDIO transport
+        return Client(server_url)
+
+# Use the client
+async def main():
+    client = create_client()
+    async with client:
+        result = await client.call_tool("test", {})
+        print(result.data)
+```

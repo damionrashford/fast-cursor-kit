@@ -1,0 +1,519 @@
+# FastMCP Server Implementation
+
+FastMCP servers provide tools, resources, and prompts to MCP clients. This guide covers building comprehensive MCP servers with FastMCP.
+
+## Basic Server Setup
+
+Create a FastMCP server by instantiating the `FastMCP` class and adding components:
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("My MCP Server")
+
+# Add tools, resources, and prompts here
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Tools
+
+Tools are server-side functions that clients can execute with arguments. They are the primary way to provide functionality to LLMs.
+
+### Basic Tools
+
+```python
+@mcp.tool
+def add(a: int, b: int) -> int:
+    """Add two numbers together"""
+    return a + b
+
+@mcp.tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers"""
+    return a * b
+```
+
+### Complex Parameters
+
+Tools can accept complex parameters using Pydantic models:
+
+```python
+from pydantic import BaseModel
+from typing import List, Optional
+
+class SearchParams(BaseModel):
+    query: str
+    filters: Optional[List[str]] = None
+    limit: int = 10
+
+@mcp.tool
+def search_database(params: SearchParams) -> List[dict]:
+    """Search the database with complex parameters"""
+    # Implementation here
+    return [{"id": 1, "title": "Result"}]
+```
+
+### Async Tools
+
+Tools can be async for handling I/O operations:
+
+```python
+import aiohttp
+
+@mcp.tool
+async def fetch_url(url: str) -> str:
+    """Fetch content from a URL"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.text()
+```
+
+### Error Handling
+
+Tools should handle errors gracefully:
+
+```python
+@mcp.tool
+def divide(a: float, b: float) -> float:
+    """Divide two numbers"""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+```
+
+### Custom Serialization
+
+Tools can use custom serializers for complex data types:
+
+```python
+from datetime import datetime
+from fastmcp import Tool
+
+@mcp.tool
+def get_current_time() -> datetime:
+    """Get the current time"""
+    return datetime.now()
+
+# Custom serializer for datetime
+def datetime_serializer(dt: datetime) -> str:
+    return dt.isoformat()
+
+# Apply custom serializer
+mcp.add_tool(
+    Tool(
+        name="get_current_time",
+        description="Get the current time",
+        fn=get_current_time,
+        serializer=datetime_serializer
+    )
+)
+```
+
+## Resources
+
+Resources are data sources that clients can read, either static or templated.
+
+### Basic Resources
+
+```python
+@mcp.resource
+def config_file() -> str:
+    """Get the configuration file content"""
+    return "server_config.json"
+
+@mcp.resource
+def api_docs() -> str:
+    """Get API documentation"""
+    return "https://api.example.com/docs"
+```
+
+### Parameterized Resources
+
+Resources can accept parameters:
+
+```python
+@mcp.resource
+def user_profile(user_id: str) -> str:
+    """Get user profile by ID"""
+    return f"user_profiles/{user_id}.json"
+```
+
+### Dynamic Resources
+
+Resources can be generated dynamically:
+
+```python
+import os
+
+@mcp.resource
+def list_files(directory: str = ".") -> str:
+    """List files in a directory"""
+    files = os.listdir(directory)
+    return "\n".join(files)
+```
+
+### Resource Metadata
+
+Resources can include metadata:
+
+```python
+from fastmcp import Resource
+
+@mcp.resource
+def important_document() -> Resource:
+    """Get an important document"""
+    return Resource(
+        uri="important_doc.pdf",
+        mimeType="application/pdf",
+        description="Critical business document"
+    )
+```
+
+## Prompts
+
+Prompts are reusable message templates that can accept arguments.
+
+### Basic Prompts
+
+```python
+@mcp.prompt
+def greeting(name: str) -> str:
+    """Generate a greeting message"""
+    return f"Hello, {name}! How can I help you today?"
+```
+
+### Complex Prompts
+
+Prompts can include multiple messages and complex logic:
+
+```python
+@mcp.prompt
+def data_analysis_prompt(data: List[float], analysis_type: str) -> str:
+    """Generate a data analysis prompt"""
+    return f"""
+    Please analyze the following data: {data}
+    
+    Analysis type: {analysis_type}
+    
+    Provide insights and recommendations based on the data.
+    """
+```
+
+### Prompt Templates
+
+Prompts can use template variables:
+
+```python
+@mcp.prompt
+def email_template(recipient: str, subject: str, content: str) -> str:
+    """Generate an email template"""
+    return f"""
+    To: {recipient}
+    Subject: {subject}
+    
+    {content}
+    
+    Best regards,
+    Your System
+    """
+```
+
+## Context Management
+
+FastMCP provides context management for sharing data across tool calls.
+
+### Session State
+
+```python
+from fastmcp import Context
+
+@mcp.tool
+def set_user_preference(context: Context, preference: str, value: str):
+    """Set a user preference"""
+    context.state["preferences"] = context.state.get("preferences", {})
+    context.state["preferences"][preference] = value
+    return f"Set {preference} to {value}"
+
+@mcp.tool
+def get_user_preference(context: Context, preference: str):
+    """Get a user preference"""
+    preferences = context.state.get("preferences", {})
+    return preferences.get(preference, "Not set")
+```
+
+### Session ID
+
+Each session has a unique ID for tracking:
+
+```python
+@mcp.tool
+def get_session_info(context: Context):
+    """Get session information"""
+    return {
+        "session_id": context.session_id,
+        "state": context.state
+    }
+```
+
+## Advanced Server Features
+
+### Middleware
+
+FastMCP supports middleware for intercepting requests and responses:
+
+```python
+from fastmcp import Middleware
+
+class LoggingMiddleware(Middleware):
+    async def handle_tool_call(self, tool_name: str, arguments: dict, context: Context):
+        print(f"Tool called: {tool_name} with args: {arguments}")
+        result = await self.next.handle_tool_call(tool_name, arguments, context)
+        print(f"Tool result: {result}")
+        return result
+
+mcp.add_middleware(LoggingMiddleware())
+```
+
+### Authentication
+
+Servers can implement authentication:
+
+```python
+from fastmcp import BearerAuthProvider
+
+auth_provider = BearerAuthProvider(
+    token="your-secret-token",
+    verify_token=lambda token: token == "your-secret-token"
+)
+
+mcp = FastMCP("Authenticated Server", auth_provider=auth_provider)
+```
+
+### Rate Limiting
+
+Implement rate limiting with middleware:
+
+```python
+import time
+from collections import defaultdict
+
+class RateLimitMiddleware(Middleware):
+    def __init__(self, max_calls: int = 10, window: int = 60):
+        self.max_calls = max_calls
+        self.window = window
+        self.calls = defaultdict(list)
+    
+    async def handle_tool_call(self, tool_name: str, arguments: dict, context: Context):
+        now = time.time()
+        session_calls = self.calls[context.session_id]
+        
+        # Remove old calls
+        session_calls[:] = [call_time for call_time in session_calls if now - call_time < self.window]
+        
+        if len(session_calls) >= self.max_calls:
+            raise Exception("Rate limit exceeded")
+        
+        session_calls.append(now)
+        return await self.next.handle_tool_call(tool_name, arguments, context)
+
+mcp.add_middleware(RateLimitMiddleware())
+```
+
+### Error Handling
+
+Implement comprehensive error handling:
+
+```python
+from fastmcp import ErrorHandler
+
+class CustomErrorHandler(ErrorHandler):
+    def handle_exception(self, exception: Exception, context: Context):
+        if isinstance(exception, ValueError):
+            return {"error": "Invalid input", "details": str(exception)}
+        elif isinstance(exception, Exception):
+            return {"error": "Internal server error"}
+        return {"error": "Unknown error"}
+
+mcp.set_error_handler(CustomErrorHandler())
+```
+
+## Server Configuration
+
+### Transport Options
+
+FastMCP supports multiple transport options:
+
+```python
+# STDIO (default)
+mcp.run()
+
+# HTTP
+mcp.run(transport="http", port=8000)
+
+# SSE
+mcp.run(transport="sse", port=8000)
+
+# Custom transport
+from fastmcp import HTTPTransport
+transport = HTTPTransport(port=8000, host="0.0.0.0")
+mcp.run(transport=transport)
+```
+
+### Server Settings
+
+Configure server behavior:
+
+```python
+mcp = FastMCP(
+    "My Server",
+    version="1.0.0",
+    description="A comprehensive MCP server"
+)
+```
+
+### Component Filtering
+
+Filter components based on tags:
+
+```python
+@mcp.tool(tags=["admin"])
+def admin_only_function():
+    """Admin-only function"""
+    pass
+
+@mcp.tool(tags=["public"])
+def public_function():
+    """Public function"""
+    pass
+
+# Enable only public tools
+mcp.set_tag_filter(["public"])
+```
+
+## Testing
+
+### Unit Testing
+
+Test individual components:
+
+```python
+import pytest
+from fastmcp import FastMCP
+
+def test_add_tool():
+    mcp = FastMCP("Test Server")
+    
+    @mcp.tool
+    def add(a: int, b: int) -> int:
+        return a + b
+    
+    result = add(2, 3)
+    assert result == 5
+```
+
+### Integration Testing
+
+Test the full server:
+
+```python
+import asyncio
+from fastmcp import Client
+
+async def test_server():
+    # Start server
+    server_process = await asyncio.create_subprocess_exec(
+        "python", "my_server.py"
+    )
+    
+    # Test with client
+    async with Client("my_server.py") as client:
+        result = await client.call_tool("add", {"a": 2, "b": 3})
+        assert result.data == 5
+    
+    # Cleanup
+    server_process.terminate()
+    await server_process.wait()
+```
+
+## Best Practices
+
+### Tool Design
+
+1. **Use descriptive names** and docstrings
+2. **Validate inputs** with Pydantic models
+3. **Handle errors gracefully** with proper exception handling
+4. **Keep tools focused** on single responsibilities
+5. **Use async for I/O operations**
+
+### Resource Design
+
+1. **Provide meaningful URIs** for resources
+2. **Include proper MIME types** for content
+3. **Use parameters** for dynamic content
+4. **Cache expensive operations** when appropriate
+
+### Prompt Design
+
+1. **Make prompts reusable** with parameters
+2. **Include clear instructions** for LLMs
+3. **Use consistent formatting** across prompts
+4. **Test prompts** with different inputs
+
+### Server Architecture
+
+1. **Separate concerns** between tools, resources, and prompts
+2. **Use middleware** for cross-cutting concerns
+3. **Implement proper authentication** for production
+4. **Monitor performance** and usage patterns
+5. **Handle errors consistently** across all components
+
+## Deployment
+
+### Production Deployment
+
+```python
+# Production server with authentication and logging
+from fastmcp import FastMCP, BearerAuthProvider, LoggingMiddleware
+
+auth_provider = BearerAuthProvider(token="production-token")
+mcp = FastMCP("Production Server", auth_provider=auth_provider)
+mcp.add_middleware(LoggingMiddleware())
+
+if __name__ == "__main__":
+    mcp.run(transport="http", port=8000, host="0.0.0.0")
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+EXPOSE 8000
+
+CMD ["python", "server.py"]
+```
+
+### Environment Configuration
+
+```python
+import os
+
+mcp = FastMCP(
+    "Configurable Server",
+    version=os.getenv("VERSION", "1.0.0"),
+    description=os.getenv("DESCRIPTION", "MCP Server")
+)
+
+# Configure based on environment
+if os.getenv("ENVIRONMENT") == "production":
+    mcp.add_middleware(LoggingMiddleware())
+    auth_provider = BearerAuthProvider(token=os.getenv("AUTH_TOKEN"))
+    mcp.set_auth_provider(auth_provider)
+```

@@ -1,0 +1,766 @@
+# React Router Components Reference
+
+## Core Navigation Components
+
+### `<Link>`
+
+The primary navigation component for declarative routing.
+
+#### Props
+```typescript
+interface LinkProps {
+  to: string | To;
+  relative?: "route" | "path";
+  preventScrollReset?: boolean;
+  replace?: boolean;
+  state?: any;
+  unstable_viewTransition?: boolean;
+  children: React.ReactNode;
+}
+```
+
+#### Usage Examples
+
+**Basic Navigation**
+```typescript
+import { Link } from "react-router-dom";
+
+function Navigation() {
+  return (
+    <nav>
+      <Link to="/">Home</Link>
+      <Link to="/about">About</Link>
+      <Link to="/posts">Posts</Link>
+    </nav>
+  );
+}
+```
+
+**With State**
+```typescript
+<Link 
+  to="/posts/123" 
+  state={{ from: "dashboard" }}
+>
+  View Post
+</Link>
+```
+
+**Relative Navigation**
+```typescript
+// From /posts/123/comments
+<Link to="../edit" relative="path">Edit Post</Link>
+<Link to="../../posts" relative="route">All Posts</Link>
+```
+
+**With View Transitions**
+```typescript
+<Link 
+  to="/posts/123" 
+  unstable_viewTransition
+>
+  View with Transition
+</Link>
+```
+
+### `<NavLink>`
+
+Enhanced Link component with active state styling.
+
+#### Props
+```typescript
+interface NavLinkProps extends LinkProps {
+  caseSensitive?: boolean;
+  className?: string | ((props: { isActive: boolean; isPending: boolean }) => string);
+  end?: boolean;
+  style?: CSSProperties | ((props: { isActive: boolean; isPending: boolean }) => CSSProperties);
+}
+```
+
+#### Usage Examples
+
+**Basic Active Styling**
+```typescript
+import { NavLink } from "react-router-dom";
+
+function Navigation() {
+  return (
+    <nav>
+      <NavLink 
+        to="/" 
+        className={({ isActive }) => isActive ? "active" : ""}
+      >
+        Home
+      </NavLink>
+      <NavLink 
+        to="/about"
+        style={({ isActive }) => ({
+          fontWeight: isActive ? "bold" : "normal"
+        })}
+      >
+        About
+      </NavLink>
+    </nav>
+  );
+}
+```
+
+**With End Prop**
+```typescript
+// Only active when exactly matching
+<NavLink to="/posts" end>
+  Posts
+</NavLink>
+```
+
+**Complex Styling**
+```typescript
+<NavLink
+  to="/dashboard"
+  className={({ isActive, isPending }) => {
+    let className = "nav-link";
+    if (isActive) className += " active";
+    if (isPending) className += " pending";
+    return className;
+  }}
+>
+  Dashboard
+</NavLink>
+```
+
+### `<Navigate>`
+
+Component for programmatic navigation.
+
+#### Props
+```typescript
+interface NavigateProps {
+  to: string | To;
+  replace?: boolean;
+  state?: any;
+  relative?: "route" | "path";
+}
+```
+
+#### Usage Examples
+
+**Conditional Navigation**
+```typescript
+import { Navigate } from "react-router-dom";
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+}
+```
+
+**With State**
+```typescript
+function RedirectWithState() {
+  return (
+    <Navigate 
+      to="/dashboard" 
+      state={{ message: "Welcome back!" }}
+      replace 
+    />
+  );
+}
+```
+
+### `<Form>`
+
+Form component for handling form submissions with automatic navigation.
+
+#### Props
+```typescript
+interface FormProps {
+  method?: "get" | "post" | "put" | "patch" | "delete";
+  action?: string | To;
+  encType?: "application/x-www-form-urlencoded" | "multipart/form-data" | "text/plain";
+  relative?: "route" | "path";
+  preventScrollReset?: boolean;
+  replace?: boolean;
+  state?: any;
+  unstable_viewTransition?: boolean;
+  children: React.ReactNode;
+}
+```
+
+#### Usage Examples
+
+**Basic Form Submission**
+```typescript
+import { Form } from "react-router-dom";
+
+function CreatePost() {
+  return (
+    <Form method="post">
+      <input name="title" type="text" required />
+      <textarea name="content" required />
+      <button type="submit">Create Post</button>
+    </Form>
+  );
+}
+```
+
+**With Custom Action**
+```typescript
+<Form method="post" action="/api/posts">
+  <input name="title" type="text" />
+  <button type="submit">Submit</button>
+</Form>
+```
+
+**File Upload**
+```typescript
+<Form method="post" encType="multipart/form-data">
+  <input name="file" type="file" />
+  <button type="submit">Upload</button>
+</Form>
+```
+
+## Layout Components
+
+### `<Routes>`
+
+Container component for route definitions.
+
+#### Props
+```typescript
+interface RoutesProps {
+  children: React.ReactNode;
+}
+```
+
+#### Usage Examples
+
+**Basic Route Structure**
+```typescript
+import { Routes, Route } from "react-router-dom";
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/posts" element={<Posts />}>
+        <Route index element={<PostsList />} />
+        <Route path=":id" element={<PostDetail />} />
+      </Route>
+    </Routes>
+  );
+}
+```
+
+### `<Route>`
+
+Individual route definition component.
+
+#### Props
+```typescript
+interface RouteProps {
+  path?: string;
+  index?: boolean;
+  element?: React.ReactElement;
+  children?: React.ReactNode;
+  caseSensitive?: boolean;
+  errorElement?: React.ReactElement;
+  loader?: LoaderFunction;
+  action?: ActionFunction;
+  shouldRevalidate?: ShouldRevalidateFunction;
+  handle?: RouteObject["handle"];
+  lazy?: LazyRouteFunction<RouteObject>;
+}
+```
+
+#### Usage Examples
+
+**Basic Route**
+```typescript
+<Route path="/posts/:id" element={<PostDetail />} />
+```
+
+**Index Route**
+```typescript
+<Route index element={<Home />} />
+```
+
+**With Loader and Action**
+```typescript
+<Route 
+  path="/posts/:id" 
+  element={<PostDetail />}
+  loader={postLoader}
+  action={postAction}
+  errorElement={<PostError />}
+/>
+```
+
+**Nested Routes**
+```typescript
+<Route path="/dashboard" element={<DashboardLayout />}>
+  <Route index element={<DashboardHome />} />
+  <Route path="profile" element={<Profile />} />
+  <Route path="settings" element={<Settings />} />
+</Route>
+```
+
+### `<Outlet>`
+
+Component for rendering child routes.
+
+#### Props
+```typescript
+interface OutletProps {
+  context?: unknown;
+}
+```
+
+#### Usage Examples
+
+**Basic Layout**
+```typescript
+function RootLayout() {
+  return (
+    <div>
+      <Header />
+      <main>
+        <Outlet />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+```
+
+**With Context**
+```typescript
+function DashboardLayout() {
+  const { user } = useAuth();
+  
+  return (
+    <div>
+      <Sidebar user={user} />
+      <main>
+        <Outlet context={{ user }} />
+      </main>
+    </div>
+  );
+}
+```
+
+### `<RouterProvider>`
+
+Provider component for data router.
+
+#### Props
+```typescript
+interface RouterProviderProps {
+  router: DataRouter;
+  fallbackElement?: React.ReactElement;
+}
+```
+
+#### Usage Examples
+
+**Basic Setup**
+```typescript
+import { RouterProvider, createBrowserRouter } from "react-router-dom";
+
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Root />,
+    children: [
+      { index: true, element: <Home /> },
+      { path: "about", element: <About /> }
+    ]
+  }
+]);
+
+function App() {
+  return <RouterProvider router={router} />;
+}
+```
+
+**With Fallback**
+```typescript
+<RouterProvider 
+  router={router} 
+  fallbackElement={<LoadingSpinner />}
+/>
+```
+
+## Utility Components
+
+### `<Await>`
+
+Component for handling async data rendering.
+
+#### Props
+```typescript
+interface AwaitProps {
+  resolve: Promise<any>;
+  errorElement?: React.ReactElement;
+  children: React.ReactElement | ((value: any) => React.ReactElement);
+}
+```
+
+#### Usage Examples
+
+**Basic Async Data**
+```typescript
+import { Await, useLoaderData } from "react-router-dom";
+import { Suspense } from "react";
+
+function PostList() {
+  const { posts } = useLoaderData();
+  
+  return (
+    <Suspense fallback={<Loading />}>
+      <Await resolve={posts}>
+        {(resolvedPosts) => (
+          <ul>
+            {resolvedPosts.map(post => (
+              <li key={post.id}>{post.title}</li>
+            ))}
+          </ul>
+        )}
+      </Await>
+    </Suspense>
+  );
+}
+```
+
+**With Error Handling**
+```typescript
+<Await 
+  resolve={posts}
+  errorElement={<ErrorComponent />}
+>
+  {(resolvedPosts) => <PostList posts={resolvedPosts} />}
+</Await>
+```
+
+### `<Scripts>`
+
+Component for managing script loading.
+
+#### Props
+```typescript
+interface ScriptsProps {
+  includeBoundaries?: boolean;
+}
+```
+
+#### Usage Examples
+
+**Basic Usage**
+```typescript
+import { Scripts } from "react-router-dom";
+
+function Root() {
+  return (
+    <html>
+      <head>
+        <title>My App</title>
+      </head>
+      <body>
+        <div id="root">
+          <Outlet />
+        </div>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+```
+
+### `<ScrollRestoration>`
+
+Component for handling scroll position restoration.
+
+#### Props
+```typescript
+interface ScrollRestorationProps {
+  getKey?: (location: Location, matches: UIMatch[]) => string | null;
+  position?: "auto" | "manual";
+  preventScrollReset?: boolean;
+}
+```
+
+#### Usage Examples
+
+**Basic Usage**
+```typescript
+import { ScrollRestoration } from "react-router-dom";
+
+function Root() {
+  return (
+    <>
+      <Outlet />
+      <ScrollRestoration />
+    </>
+  );
+}
+```
+
+**Custom Key Generation**
+```typescript
+<ScrollRestoration 
+  getKey={(location, matches) => {
+    return location.pathname;
+  }}
+/>
+```
+
+### `<Meta>`
+
+Component for managing document metadata.
+
+#### Props
+```typescript
+interface MetaProps {
+  name?: string;
+  property?: string;
+  content: string;
+  charSet?: string;
+  httpEquiv?: string;
+}
+```
+
+#### Usage Examples
+
+**Basic Meta Tags**
+```typescript
+import { Meta } from "react-router-dom";
+
+function PostDetail() {
+  const { post } = useLoaderData();
+  
+  return (
+    <>
+      <Meta name="description" content={post.excerpt} />
+      <Meta property="og:title" content={post.title} />
+      <Meta property="og:description" content={post.excerpt} />
+      <h1>{post.title}</h1>
+      <p>{post.content}</p>
+    </>
+  );
+}
+```
+
+## Router Components
+
+### `<BrowserRouter>`
+
+Router component for browser environments.
+
+#### Props
+```typescript
+interface BrowserRouterProps {
+  basename?: string;
+  children: React.ReactNode;
+  window?: Window;
+}
+```
+
+#### Usage Examples
+
+**Basic Setup**
+```typescript
+import { BrowserRouter } from "react-router-dom";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+```
+
+**With Basename**
+```typescript
+<BrowserRouter basename="/app">
+  <Routes>
+    <Route path="/" element={<Home />} />
+  </Routes>
+</BrowserRouter>
+```
+
+### `<HashRouter>`
+
+Router component for hash-based routing.
+
+#### Props
+```typescript
+interface HashRouterProps {
+  basename?: string;
+  children: React.ReactNode;
+  window?: Window;
+}
+```
+
+#### Usage Examples
+
+**Basic Setup**
+```typescript
+import { HashRouter } from "react-router-dom";
+
+function App() {
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    </HashRouter>
+  );
+}
+```
+
+### `<MemoryRouter>`
+
+Router component for testing and non-browser environments.
+
+#### Props
+```typescript
+interface MemoryRouterProps {
+  basename?: string;
+  children: React.ReactNode;
+  initialEntries?: string[];
+  initialIndex?: number;
+}
+```
+
+#### Usage Examples
+
+**Testing Setup**
+```typescript
+import { MemoryRouter } from "react-router-dom";
+
+function TestApp() {
+  return (
+    <MemoryRouter initialEntries={["/posts/123"]}>
+      <Routes>
+        <Route path="/posts/:id" element={<PostDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+```
+
+## Advanced Component Patterns
+
+### 1. **Protected Route Component**
+```typescript
+function ProtectedRoute({ 
+  children, 
+  redirectTo = "/login" 
+}: { 
+  children: React.ReactNode;
+  redirectTo?: string;
+}) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Navigate to={redirectTo} replace />;
+  }
+  
+  return <>{children}</>;
+}
+```
+
+### 2. **Layout with Sidebar**
+```typescript
+function DashboardLayout() {
+  return (
+    <div className="dashboard">
+      <Sidebar />
+      <main className="content">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+```
+
+### 3. **Error Boundary Component**
+```typescript
+function ErrorBoundary() {
+  const error = useRouteError();
+  
+  return (
+    <div className="error-page">
+      <h1>Oops!</h1>
+      <p>Sorry, an unexpected error has occurred.</p>
+      <p>{error.statusText || error.message}</p>
+    </div>
+  );
+}
+```
+
+### 4. **Loading Component**
+```typescript
+function LoadingSpinner() {
+  return (
+    <div className="loading">
+      <div className="spinner"></div>
+      <p>Loading...</p>
+    </div>
+  );
+}
+```
+
+### 5. **Form with Validation**
+```typescript
+function CreatePostForm() {
+  const actionData = useActionData();
+  
+  return (
+    <Form method="post">
+      <div>
+        <label htmlFor="title">Title</label>
+        <input 
+          id="title" 
+          name="title" 
+          type="text" 
+          required 
+        />
+        {actionData?.errors?.title && (
+          <span className="error">{actionData.errors.title}</span>
+        )}
+      </div>
+      
+      <div>
+        <label htmlFor="content">Content</label>
+        <textarea 
+          id="content" 
+          name="content" 
+          required 
+        />
+        {actionData?.errors?.content && (
+          <span className="error">{actionData.errors.content}</span>
+        )}
+      </div>
+      
+      <button type="submit">Create Post</button>
+    </Form>
+  );
+}
+```
+
+This comprehensive components reference provides detailed information about all React Router components, their props, usage patterns, and practical examples for building robust routing solutions.
+description:
+globs:
+alwaysApply: false
+---

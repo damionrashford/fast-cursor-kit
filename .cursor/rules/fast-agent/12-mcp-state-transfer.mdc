@@ -1,0 +1,388 @@
+---
+description: Quick start guide for transferring conversation history between agents
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# Quick Start: State Transfer with MCP
+
+In this quick start, we'll demonstrate how **fast-agent** can transfer state between two agents using MCP Prompts.
+
+First, we'll start `agent_one` as an MCP Server, and send it some messages with the MCP Inspector tool.
+
+Next, we'll run `agent_two` and transfer the conversation from `agent_one` using an MCP Prompt.
+
+Finally, we'll take a look at **fast-agent**'s `prompt-server` and how it can assist building agent applications
+
+You'll need API Keys to connect to a [supported model](https://fast-agent.ai/models/llm_providers/), or use Ollama's [OpenAI compatibility](https://github.com/ollama/ollama/blob/main/docs/openai.md) mode to use local models.
+
+The quick start also uses the MCP Inspector - check [here](https://modelcontextprotocol.io/docs/tools/inspector) for installation instructions.
+
+## Step 1: Setup
+
+```bash
+# create, and change to a new directory
+mkdir fast-agent && cd fast-agent
+
+# create and activate a python environment
+uv venv
+source .venv/bin/activate
+
+# setup fast-agent
+uv pip install fast-agent-mcp
+
+# create the state transfer example
+fast-agent quickstart state-transfer
+```
+
+**Windows:**
+```bash
+# create, and change to a new directory
+md fast-agent | cd
+
+# create and activate a python environment
+uv venv
+.venv\Scripts\activate
+
+# setup fast-agent
+uv pip install fast-agent-mcp
+
+# create the state transfer example
+fast-agent quickstart state-transfer
+```
+
+Change to the state-transfer directory (`cd state-transfer`), rename `fastagent.secrets.yaml.example` to `fastagent.secrets.yaml` and enter the API Keys for the providers you wish to use.
+
+The supplied `fastagent.config.yaml` file contains a default of `gpt-4.1` - edit this if you wish.
+
+Finally, run `uv run agent_one.py` and send a test message to make sure that everything working. Enter `stop` to return to the command line.
+
+## Step 2: Run agent_one as an MCP Server
+
+To start `"agent_one"` as an MCP Server, run the following command:
+
+```bash
+# start agent_one as an MCP Server:
+uv run agent_one.py --server --port 8001
+```
+
+The agent is now available as an MCP Server.
+
+## Step 3: Connect and chat with agent_one
+
+From another command line, run the Model Context Protocol inspector to connect to the agent:
+
+```bash
+# run the MCP inspector
+npx @modelcontextprotocol/inspector
+```
+
+Choose the "Streamable HTTP" transport type, and the url `http://localhost:8001/mcp`. After clicking the `connect` button, you can interact with the agent from the `tools` tab. Use the `agent_one_send` tool to send the agent a chat message and see it's response.
+
+The conversation history can be viewed from the `prompts` tab. Use the `agent_one_history` prompt to view it.
+
+Disconnect the Inspector, then press `ctrl+c` in the command window to stop the process.
+
+## Step 4: Transfer the conversation to agent_two
+
+We can now transfer and continue the conversation with `agent_two`.
+
+Run `agent_two` with the following command:
+
+```bash
+# start agent_two as an MCP Server:
+uv run agent_two.py
+```
+
+Once started, type `'/prompts'` to see the available prompts. Select `1` to apply the Prompt from `agent_one`.
+
+The conversation history from `agent_one` will be loaded into `agent_two`, and you can continue the conversation seamlessly.
+
+## Understanding State Transfer
+
+### What is State Transfer?
+
+State transfer allows you to move conversation context between different agents or sessions. This is useful for:
+
+- Continuing conversations across different models
+- Sharing context between specialized agents
+- Persisting conversations for later use
+- Testing different agents with the same context
+
+### How MCP Prompts Work
+
+MCP Prompts are a standardized way to share conversation history and context. They contain:
+
+- Complete conversation history
+- Tool calls and results
+- Metadata about the conversation
+- Timestamps and session information
+
+### The Transfer Process
+
+1. **Export State**: The source agent exports its conversation as an MCP Prompt
+2. **Transfer**: The prompt is shared via MCP protocol
+3. **Import State**: The target agent imports the prompt and reconstructs the conversation
+4. **Continue**: The conversation can continue seamlessly
+
+## Advanced State Transfer Features
+
+### Selective State Transfer
+
+You can transfer only specific parts of a conversation:
+
+```python
+# Transfer only recent messages
+recent_history = agent_one.message_history[-5:]  # Last 5 messages
+await agent_two.generate(recent_history)
+
+# Transfer messages with specific criteria
+filtered_history = [
+    msg for msg in agent_one.message_history 
+    if "important_topic" in msg.content[0].text
+]
+await agent_two.generate(filtered_history)
+```
+
+### State Transformation
+
+Transform the state during transfer:
+
+```python
+# Modify messages before transfer
+transformed_history = []
+for message in agent_one.message_history:
+    if message.role == "user":
+        # Add context to user messages
+        modified_content = f"Context: {message.content[0].text}"
+        transformed_message = PromptMessageMultipart(
+            role="user",
+            content=[TextContent(type="text", text=modified_content)]
+        )
+        transformed_history.append(transformed_message)
+    else:
+        transformed_history.append(message)
+
+await agent_two.generate(transformed_history)
+```
+
+### Multi-Agent State Transfer
+
+Transfer state between multiple agents:
+
+```python
+# Transfer from agent_one to multiple agents
+history = agent_one.message_history
+
+await agent_two.generate(history)
+await agent_three.generate(history)
+await agent_four.generate(history)
+
+# All agents now have the same conversation context
+```
+
+## Using the Prompt Server
+
+### Starting the Prompt Server
+
+The prompt server allows you to serve and manage MCP Prompts:
+
+```bash
+# Start the prompt server
+fast-agent prompt-server --port 8080
+```
+
+### Managing Prompts
+
+```python
+# Save a conversation as a prompt
+await agent.save_prompt("my_conversation", "conversation_001")
+
+# Load a prompt
+await agent.load_prompt("my_conversation", "conversation_001")
+
+# List available prompts
+prompts = await agent.list_prompts("my_conversation")
+print(prompts)
+```
+
+### Prompt Metadata
+
+Prompts can include metadata for better organization:
+
+```python
+# Save prompt with metadata
+await agent.save_prompt(
+    "my_conversation", 
+    "conversation_001",
+    metadata={
+        "topic": "AI discussion",
+        "participants": ["user", "agent"],
+        "date": "2025-01-15",
+        "tags": ["ai", "discussion", "technical"]
+    }
+)
+```
+
+## State Transfer in Workflows
+
+### Chain Workflows
+
+Transfer state between workflow steps:
+
+```python
+@fast.agent("researcher", "Research topics thoroughly")
+@fast.agent("writer", "Write content based on research")
+@fast.agent("reviewer", "Review and improve content")
+
+@fast.chain(
+    name="content_pipeline",
+    sequence=["researcher", "writer", "reviewer"]
+)
+
+async def main():
+    async with fast.run() as agent:
+        # Start with researcher
+        research_result = await agent.researcher.send("Research AI trends")
+        
+        # Transfer research context to writer
+        await agent.writer.generate(agent.researcher.message_history)
+        
+        # Continue with writing
+        content = await agent.writer.send("Write a summary")
+        
+        # Transfer to reviewer
+        await agent.reviewer.generate(agent.writer.message_history)
+        
+        # Final review
+        final_content = await agent.reviewer.send("Review and improve")
+```
+
+### Parallel Workflows
+
+Share state across parallel agents:
+
+```python
+@fast.agent("analyzer_1", "Analyze from technical perspective")
+@fast.agent("analyzer_2", "Analyze from business perspective")
+@fast.agent("synthesizer", "Synthesize multiple analyses")
+
+@fast.parallel(
+    name="multi_analysis",
+    fan_out=["analyzer_1", "analyzer_2"]
+)
+
+async def main():
+    async with fast.run() as agent:
+        # Share initial context with both analyzers
+        context = "Analyze the impact of AI on healthcare"
+        
+        await agent.analyzer_1.send(context)
+        await agent.analyzer_2.send(context)
+        
+        # Transfer both analyses to synthesizer
+        await agent.synthesizer.generate(agent.analyzer_1.message_history)
+        await agent.synthesizer.generate(agent.analyzer_2.message_history)
+        
+        # Synthesize the results
+        synthesis = await agent.synthesizer.send("Synthesize the analyses")
+```
+
+## Best Practices
+
+### State Management
+
+1. **Keep state clean** - Remove unnecessary context before transfer
+2. **Use meaningful names** - Name prompts descriptively
+3. **Include metadata** - Add context about the conversation
+4. **Version control** - Track changes to important conversations
+
+### Performance
+
+1. **Limit history size** - Don't transfer extremely long conversations
+2. **Filter content** - Only transfer relevant parts
+3. **Compress when possible** - Use compression for large states
+4. **Cache frequently used states** - Avoid repeated transfers
+
+### Security
+
+1. **Validate state** - Check transferred state for malicious content
+2. **Sanitize data** - Remove sensitive information before transfer
+3. **Use secure channels** - Transfer state over secure connections
+4. **Audit transfers** - Log state transfer activities
+
+### Error Handling
+
+```python
+try:
+    # Attempt state transfer
+    await agent_two.generate(agent_one.message_history)
+except StateTransferError as e:
+    print(f"State transfer failed: {e.message}")
+    # Fallback: start fresh conversation
+    await agent_two.send("Let's start a new conversation")
+except ValidationError as e:
+    print(f"State validation failed: {e.details}")
+    # Clean and retry
+    cleaned_history = clean_conversation_history(agent_one.message_history)
+    await agent_two.generate(cleaned_history)
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### State Transfer Fails
+
+```python
+# Check if agents are compatible
+if not agent_one.is_compatible_with(agent_two):
+    print("Agents are not compatible for state transfer")
+
+# Check state size
+if len(agent_one.message_history) > MAX_STATE_SIZE:
+    print("State is too large, consider filtering")
+```
+
+#### Conversation Context Lost
+
+```python
+# Verify state transfer
+transferred_messages = len(agent_two.message_history)
+original_messages = len(agent_one.message_history)
+
+if transferred_messages != original_messages:
+    print(f"State transfer incomplete: {transferred_messages}/{original_messages}")
+```
+
+#### Performance Issues
+
+```python
+# Monitor transfer performance
+import time
+
+start_time = time.time()
+await agent_two.generate(agent_one.message_history)
+transfer_time = time.time() - start_time
+
+if transfer_time > MAX_TRANSFER_TIME:
+    print(f"State transfer took too long: {transfer_time}s")
+```
+
+### Debug Mode
+
+Enable debugging for state transfer:
+
+```yaml
+# fastagent.config.yaml
+logging:
+  level: "DEBUG"
+  state_transfer:
+    enabled: true
+    show_transfers: true
+    show_validation: true
+```
+
+---
+
+*Source: [https://fast-agent.ai/mcp/state_transfer/](https://fast-agent.ai/mcp/state_transfer/)*

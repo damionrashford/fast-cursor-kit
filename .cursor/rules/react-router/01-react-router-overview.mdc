@@ -1,0 +1,282 @@
+# React Router Overview and Core Concepts
+
+## What is React Router?
+
+React Router is a popular routing library for React applications that enables client-side routing, allowing you to create single-page applications (SPAs) with multiple views and navigation between them. It provides a declarative way to handle routing in React applications.
+
+## Key Features
+
+### 1. **Multiple Routing Modes**
+React Router supports three distinct modes for different use cases:
+
+#### Framework Mode (Recommended)
+- **Purpose**: Full-stack applications with server-side rendering
+- **Features**: File-based routing, automatic code splitting, data loading, actions
+- **Use Case**: Modern web applications requiring SEO, performance, and full-stack capabilities
+- **Components**: `<Link>`, `<Form>`, `<Outlet>`, loaders, actions
+
+#### Data Mode
+- **Purpose**: Client-side applications with data management
+- **Features**: Route objects, data loading, actions, navigation
+- **Use Case**: SPAs requiring complex data fetching and state management
+- **Components**: `RouterProvider`, `createBrowserRouter`, loaders, actions
+
+#### Declarative Mode
+- **Purpose**: Simple client-side routing
+- **Features**: Basic routing, navigation, URL parameter handling
+- **Use Case**: Simple applications with basic routing needs
+- **Components**: `<BrowserRouter>`, `<Routes>`, `<Route>`, `<Link>`
+
+### 2. **Core Components**
+
+#### Navigation Components
+- **`<Link>`**: Declarative navigation between routes
+- **`<NavLink>`**: Link with active state styling
+- **`<Navigate>`**: Programmatic navigation component
+- **`<Form>`**: Form submission with automatic navigation
+
+#### Layout Components
+- **`<Routes>`**: Container for route definitions
+- **`<Route>`**: Individual route definition
+- **`<Outlet>`**: Renders child routes
+- **`<RouterProvider>`**: Provides routing context
+
+#### Utility Components
+- **`<Await>`**: Handles async data rendering
+- **`<Scripts>`**: Manages script loading
+- **`<ScrollRestoration>`**: Handles scroll position
+- **`<Meta>`**: Manages document metadata
+
+### 3. **Hooks for Navigation and Data**
+
+#### Navigation Hooks
+- **`useNavigate()`**: Programmatic navigation
+- **`useLocation()`**: Access current location
+- **`useParams()`**: Access route parameters
+- **`useSearchParams()`**: Access and modify query parameters
+
+#### Data Hooks
+- **`useLoaderData()`**: Access loader data
+- **`useActionData()`**: Access action data
+- **`useFetcher()`**: Imperative data fetching
+- **`useRevalidator()`**: Revalidate data
+
+#### State Hooks
+- **`useNavigation()`**: Navigation state
+- **`useMatches()`**: Current route matches
+- **`useOutletContext()`**: Share data between routes
+
+### 4. **Data Loading and Actions**
+
+#### Loaders
+- **Purpose**: Fetch data before rendering routes
+- **Execution**: Server-side (Framework mode) or client-side (Data mode)
+- **Access**: Via `useLoaderData()` hook
+- **Error Handling**: Automatic error boundaries
+
+#### Actions
+- **Purpose**: Handle form submissions and mutations
+- **Execution**: Server-side (Framework mode) or client-side (Data mode)
+- **Access**: Via `useActionData()` hook
+- **Validation**: Built-in form validation support
+
+### 5. **Advanced Features**
+
+#### Error Handling
+- **Error Boundaries**: Automatic error catching and display
+- **Error Routes**: Dedicated error pages
+- **Error Reporting**: Integration with error reporting services
+
+#### Loading States
+- **Pending UI**: Show loading indicators during navigation
+- **Suspense Integration**: React Suspense compatibility
+- **Optimistic Updates**: Immediate UI updates
+
+#### Performance Features
+- **Code Splitting**: Automatic route-based code splitting
+- **Prefetching**: Preload routes for faster navigation
+- **Caching**: Intelligent data caching strategies
+
+## Architecture Patterns
+
+### 1. **File-Based Routing (Framework Mode)**
+```
+app/
+├── routes/
+│   ├── _index.tsx          # Home page
+│   ├── about.tsx           # About page
+│   ├── posts/
+│   │   ├── _index.tsx      # Posts list
+│   │   ├── $postId.tsx     # Individual post
+│   │   └── new.tsx         # New post form
+│   └── layout.tsx          # Root layout
+├── components/             # Shared components
+└── utils/                  # Utility functions
+```
+
+### 2. **Route Object Pattern (Data Mode)**
+```typescript
+const routes = [
+  {
+    path: "/",
+    element: <Root />,
+    children: [
+      {
+        index: true,
+        element: <Home />
+      },
+      {
+        path: "about",
+        element: <About />
+      },
+      {
+        path: "posts",
+        element: <Posts />,
+        children: [
+          {
+            index: true,
+            element: <PostsList />
+          },
+          {
+            path: ":postId",
+            element: <PostDetail />
+          }
+        ]
+      }
+    ]
+  }
+];
+```
+
+### 3. **Declarative Pattern (Declarative Mode)**
+```typescript
+<BrowserRouter>
+  <Routes>
+    <Route path="/" element={<Root />}>
+      <Route index element={<Home />} />
+      <Route path="about" element={<About />} />
+      <Route path="posts" element={<Posts />}>
+        <Route index element={<PostsList />} />
+        <Route path=":postId" element={<PostDetail />} />
+      </Route>
+    </Route>
+  </Routes>
+</BrowserRouter>
+```
+
+## Best Practices
+
+### 1. **Route Organization**
+- Use nested routes for related functionality
+- Implement layouts for consistent UI structure
+- Separate concerns with dedicated route files
+
+### 2. **Data Management**
+- Use loaders for data fetching
+- Implement proper error handling
+- Leverage caching for performance
+
+### 3. **Navigation**
+- Use semantic URLs
+- Implement proper loading states
+- Handle navigation errors gracefully
+
+### 4. **Performance**
+- Enable code splitting
+- Implement prefetching for critical routes
+- Optimize bundle sizes
+
+### 5. **Accessibility**
+- Use semantic HTML
+- Implement proper focus management
+- Provide keyboard navigation support
+
+## Integration Patterns
+
+### 1. **With State Management**
+- Use React Router with Redux, Zustand, or Context API
+- Leverage route parameters for state synchronization
+- Implement proper state persistence
+
+### 2. **With Server-Side Rendering**
+- Use Framework mode for SSR support
+- Implement proper hydration strategies
+- Handle server-side data fetching
+
+### 3. **With Testing**
+- Use React Router's testing utilities
+- Mock routing for component tests
+- Test navigation flows end-to-end
+
+## Migration and Upgrading
+
+### 1. **From v6 to v7**
+- Update to new API patterns
+- Migrate to new routing modes
+- Update component usage
+
+### 2. **From Other Routing Libraries**
+- Understand React Router's patterns
+- Migrate route definitions
+- Update navigation logic
+
+### 3. **Framework Adoption**
+- Choose appropriate routing mode
+- Implement proper data loading
+- Set up error handling
+
+## Common Patterns and Examples
+
+### 1. **Protected Routes**
+```typescript
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+}
+```
+
+### 2. **Layout Components**
+```typescript
+function RootLayout() {
+  return (
+    <div>
+      <Header />
+      <main>
+        <Outlet />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+```
+
+### 3. **Data Loading**
+```typescript
+export async function loader({ params }: LoaderFunctionArgs) {
+  const post = await getPost(params.postId);
+  if (!post) {
+    throw new Response("Not Found", { status: 404 });
+  }
+  return { post };
+}
+```
+
+### 4. **Form Handling**
+```typescript
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const post = await createPost(formData);
+  return redirect(`/posts/${post.id}`);
+}
+```
+
+This comprehensive overview provides the foundation for understanding React Router's capabilities and choosing the right patterns for your application needs.
+description:
+globs:
+alwaysApply: false
+---

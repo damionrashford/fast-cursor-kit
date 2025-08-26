@@ -1,0 +1,273 @@
+---
+description: Model specification, precedence rules, reasoning effort, and history saving features
+globs: ["**/*.py", "**/*.yaml", "**/*.yml"]
+alwaysApply: true
+---
+
+# Model Features and History Saving
+
+Models in **fast-agent** are specified with a model string, that takes the format `provider.model_name.<reasoning_effort>`
+
+## Precedence
+
+Model specifications in fast-agent follow this precedence order (highest to lowest):
+
+1. Explicitly set in agent decorators
+2. Command line arguments with `--model` flag
+3. Default model in `fastagent.config.yaml`
+
+## Format
+
+Model strings follow this format: `provider.model_name.reasoning_effort`
+
+- **provider**: The LLM provider (e.g., `anthropic`, `openai`, `azure`, `deepseek`, `generic`, `openrouter`, `tensorzero`)
+- **model_name**: The specific model to use in API calls (for Azure, this is your deployment name)
+- **reasoning_effort** (optional): Controls the reasoning effort for supported models
+
+### Examples
+
+- `anthropic.claude-3-7-sonnet-latest`
+- `openai.gpt-4o`
+- `openai.o3-mini.high`
+- `azure.my-deployment`
+- `generic.llama3.2:latest`
+- `openrouter.google/gemini-2.5-pro-exp-03-25:free`
+- `tensorzero.my_tensorzero_function`
+
+## Reasoning Effort
+
+For models that support it (`o1`, `o1-preview` and `o3-mini`), you can specify a reasoning effort of **high**, **medium** or **low** - for example `openai.o3-mini.high`. **medium** is the default if not specified.
+
+`gpt-5` additionally supports a `minimal` reasoning effort.
+
+## Aliases
+
+For convenience, popular models have an alias set such as `gpt-4o` or `sonnet`. These are documented on the [LLM Providers](https://fast-agent.ai/models/llm_providers/) page.
+
+## Default Configuration
+
+You can set a default model for your application in your `fastagent.config.yaml`:
+
+```yaml
+default_model: "openai.gpt-4o"  # Default model for all agents
+```
+
+## History Saving
+
+You can save the conversation history to a file by sending a `***SAVE_HISTORY <filename>` message. This can then be reviewed, edited, loaded, or served with the `prompt-server` or replayed with the `playback` model.
+
+This can be helpful when developing applications to:
+
+- Save a conversation for editing
+- Set up in-context learning
+- Produce realistic test scenarios to exercise edge conditions etc. with the [Playback model](https://fast-agent.ai/models/internal_models/#playback)
+
+## Model Capabilities
+
+### Text Generation
+
+All models support basic text generation with configurable parameters:
+
+```python
+@fast.agent(
+    name="text_generator",
+    model="openai.gpt-4o",
+    request_params=RequestParams(
+        temperature=0.7,
+        max_tokens=2048
+    )
+)
+```
+
+### Multimodal Support
+
+Many models support multimodal inputs including images and PDFs:
+
+```python
+# Send an image to a vision-capable model
+response = await agent.send(Prompt.user("Describe this image", Path("photo.jpg")))
+
+# Send a PDF to a document-capable model
+response = await agent.send(Prompt.user("Summarize this document", Path("report.pdf")))
+```
+
+### Structured Outputs
+
+Models can be configured to return structured data using Pydantic models:
+
+```python
+from pydantic import BaseModel
+from typing import List
+
+class AnalysisResult(BaseModel):
+    summary: str
+    key_points: List[str]
+    confidence: float
+
+result = await agent.structured(
+    "Analyze this text",
+    AnalysisResult,
+    "Sample text to analyze"
+)
+```
+
+### Tool Calling
+
+Models can use MCP tools for enhanced capabilities:
+
+```python
+@fast.agent(
+    name="tool_user",
+    model="openai.gpt-4o",
+    servers=["filesystem", "web_search"],
+    request_params=RequestParams(
+        max_iterations=10,  # Allow up to 10 tool calls
+        parallel_tool_calls=True  # Allow simultaneous tool calls
+    )
+)
+```
+
+## Model-Specific Features
+
+### OpenAI Models
+
+#### GPT-4 Series
+- **Vision support**: `gpt-4o`, `gpt-4o-mini`
+- **Reasoning models**: `o1`, `o1-preview`, `o3-mini`
+- **Structured outputs**: All GPT-4 models
+- **Tool calling**: All GPT-4 models
+
+#### GPT-5 Series
+- **Advanced reasoning**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`
+- **Reasoning effort levels**: `minimal`, `low`, `medium`, `high`
+
+### Anthropic Models
+
+#### Claude Series
+- **Vision support**: `claude-3-5-sonnet-latest`, `claude-3-5-haiku-latest`
+- **Document processing**: PDF support
+- **Tool calling**: All Claude models
+- **Structured outputs**: All Claude models
+
+### Azure OpenAI
+
+- **Custom deployments**: Use your Azure deployment names
+- **Regional availability**: Check Azure documentation for model availability
+- **Authentication**: Multiple authentication methods supported
+
+## Performance Optimization
+
+### Token Management
+
+```python
+@fast.agent(
+    name="efficient_agent",
+    model="openai.gpt-4o-mini",  # Use smaller model for efficiency
+    request_params=RequestParams(
+        max_tokens=1024,  # Limit response length
+        temperature=0.3   # Lower temperature for more focused responses
+    )
+)
+```
+
+### Caching
+
+**fast-agent** supports response caching to reduce API calls:
+
+```yaml
+# fastagent.config.yaml
+caching:
+  enabled: true
+  ttl: 3600  # Cache for 1 hour
+  max_size: 1000  # Maximum cache entries
+```
+
+### Batch Processing
+
+For multiple similar requests:
+
+```python
+async def process_batch(queries: List[str]):
+    async with fast.run() as agent:
+        tasks = [agent.send(query) for query in queries]
+        results = await asyncio.gather(*tasks)
+        return results
+```
+
+## Error Handling
+
+### Model-Specific Errors
+
+```python
+try:
+    response = await agent.send("Generate content")
+except ModelRateLimitError:
+    # Handle rate limiting
+    await asyncio.sleep(60)
+    response = await agent.send("Generate content")
+except ModelContextLengthError:
+    # Handle context length exceeded
+    # Truncate or summarize input
+    pass
+```
+
+### Fallback Strategies
+
+```python
+@fast.agent(
+    name="robust_agent",
+    model="openai.gpt-4o",  # Primary model
+    fallback_model="openai.gpt-4o-mini"  # Fallback if primary fails
+)
+```
+
+## Monitoring and Observability
+
+### OpenTelemetry Integration
+
+**fast-agent** supports OpenTelemetry for monitoring model usage:
+
+```yaml
+# fastagent.config.yaml
+otel:
+  enabled: true
+  otlp_endpoint: "http://localhost:4318/v1/traces"
+```
+
+### Usage Tracking
+
+Track token usage and costs:
+
+```python
+# Get usage statistics
+usage = agent.get_usage_stats()
+print(f"Total tokens: {usage.total_tokens}")
+print(f"Estimated cost: ${usage.estimated_cost}")
+```
+
+## Best Practices
+
+### Model Selection
+
+1. **Choose appropriate model size** for your use case
+2. **Consider cost vs. performance** trade-offs
+3. **Use vision models** when image analysis is needed
+4. **Test multiple models** for optimal results
+
+### Configuration
+
+1. **Set reasonable defaults** in config files
+2. **Use environment variables** for sensitive data
+3. **Override models** at runtime when needed
+4. **Monitor usage** to optimize costs
+
+### Performance
+
+1. **Cache responses** for repeated queries
+2. **Use appropriate temperature** settings
+3. **Limit token usage** for cost control
+4. **Implement retry logic** for reliability
+
+---
+
+*Source: [https://fast-agent.ai/models/](https://fast-agent.ai/models/)*

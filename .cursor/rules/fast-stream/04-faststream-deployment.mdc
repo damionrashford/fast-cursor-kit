@@ -1,0 +1,922 @@
+# FastStream Deployment and Production
+
+FastStream applications can be deployed in various environments with different strategies. This guide covers deployment patterns, production configurations, monitoring, scaling, and operational best practices.
+
+## Deployment Strategies
+
+### Container Deployment
+
+#### Docker Configuration
+
+```dockerfile
+# Dockerfile for FastStream application
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# Expose port for health checks
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application
+CMD ["python", "app.py"]
+```
+
+#### Docker Compose
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  faststream-app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BROKERS=localhost:9092
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+    depends_on:
+      - kafka
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
+```
+
+### Kubernetes Deployment
+
+#### Basic Kubernetes Configuration
+
+```yaml
+# k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: faststream-app
+  labels:
+    app: faststream-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: faststream-app
+  template:
+    metadata:
+      labels:
+        app: faststream-app
+    spec:
+      containers:
+      - name: faststream-app
+        image: faststream-app:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka-service:9092"
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+```
+
+#### Kubernetes Service
+
+```yaml
+# k8s/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: faststream-service
+spec:
+  selector:
+    app: faststream-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: ClusterIP
+```
+
+#### Kubernetes ConfigMap
+
+```yaml
+# k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: faststream-config
+data:
+  app_config.yaml: |
+    brokers:
+      kafka:
+        bootstrap_servers: kafka-service:9092
+        group_id: faststream-group
+      redis:
+        url: redis://redis-service:6379
+    
+    logging:
+      level: INFO
+      format: json
+    
+    monitoring:
+      enabled: true
+      metrics_port: 9090
+```
+
+#### Kubernetes Secret
+
+```yaml
+# k8s/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: faststream-secrets
+type: Opaque
+data:
+  kafka_username: <base64-encoded-username>
+  kafka_password: <base64-encoded-password>
+  redis_password: <base64-encoded-redis-password>
+```
+
+### Serverless Deployment
+
+#### AWS Lambda with FastStream
+
+```python
+# lambda_handler.py
+import json
+from faststream import FastStream
+from faststream.kafka import KafkaBroker
+
+app = FastStream("lambda-service")
+broker = KafkaBroker("kafka-cluster:9092")
+
+@app.subscribe("events")
+async def handle_event(message: dict):
+    return {"status": "processed", "message": message}
+
+def lambda_handler(event, context):
+    # Process SQS/SNS events
+    for record in event['Records']:
+        message = json.loads(record['body'])
+        # Publish to FastStream
+        asyncio.create_task(app.publish("events", message))
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Events processed')
+    }
+```
+
+#### Google Cloud Functions
+
+```python
+# main.py
+import functions_framework
+from faststream import FastStream
+
+app = FastStream("gcp-function-service")
+
+@app.subscribe("events")
+async def handle_event(message: dict):
+    return {"status": "processed"}
+
+@functions_framework.cloud_event
+def handle_cloud_event(cloud_event):
+    # Process Cloud Event
+    message = cloud_event.data
+    asyncio.create_task(app.publish("events", message))
+    
+    return {"status": "accepted"}
+```
+
+## Production Configuration
+
+### Environment Configuration
+
+```python
+# config.py
+import os
+from typing import Optional
+from pydantic import BaseSettings
+
+class Settings(BaseSettings):
+    # Application settings
+    app_name: str = "faststream-service"
+    app_version: str = "1.0.0"
+    debug: bool = False
+    
+    # Broker settings
+    kafka_brokers: str = "localhost:9092"
+    kafka_username: Optional[str] = None
+    kafka_password: Optional[str] = None
+    kafka_security_protocol: str = "PLAINTEXT"
+    
+    redis_url: str = "redis://localhost:6379"
+    redis_password: Optional[str] = None
+    
+    # Logging
+    log_level: str = "INFO"
+    log_format: str = "json"
+    
+    # Monitoring
+    metrics_enabled: bool = True
+    metrics_port: int = 9090
+    
+    # Health checks
+    health_check_interval: int = 30
+    health_check_timeout: int = 10
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+### Application Factory
+
+```python
+# app_factory.py
+from faststream import FastStream
+from faststream.kafka import KafkaBroker
+from faststream.redis import RedisBroker
+from config import settings
+
+def create_app() -> FastStream:
+    # Configure broker based on environment
+    if settings.kafka_brokers:
+        broker = KafkaBroker(
+            settings.kafka_brokers,
+            username=settings.kafka_username,
+            password=settings.kafka_password,
+            security_protocol=settings.kafka_security_protocol
+        )
+    else:
+        broker = RedisBroker(settings.redis_url)
+    
+    # Create FastStream app
+    app = FastStream(
+        settings.app_name,
+        broker=broker,
+        description="Production FastStream service"
+    )
+    
+    # Configure logging
+    configure_logging(app)
+    
+    # Configure monitoring
+    if settings.metrics_enabled:
+        configure_monitoring(app)
+    
+    # Configure health checks
+    configure_health_checks(app)
+    
+    return app
+
+def configure_logging(app: FastStream):
+    import logging
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level),
+        format=settings.log_format
+    )
+
+def configure_monitoring(app: FastStream):
+    from faststream.monitoring import MetricsCollector
+    metrics = MetricsCollector()
+    app.add_middleware(metrics.middleware)
+
+def configure_health_checks(app: FastStream):
+    @app.health_check
+    async def broker_health():
+        try:
+            await app.broker.ping()
+            return {"broker": "healthy"}
+        except Exception as e:
+            return {"broker": "unhealthy", "error": str(e)}
+```
+
+### Production Application
+
+```python
+# app.py
+import asyncio
+import signal
+import sys
+from app_factory import create_app
+from config import settings
+
+app = create_app()
+
+@app.subscribe("user-events")
+async def handle_user_event(message: dict):
+    # Process user event
+    return {"status": "processed"}
+
+@app.subscribe("order-events")
+async def handle_order_event(message: dict):
+    # Process order event
+    return {"status": "processed"}
+
+async def shutdown(signal, loop):
+    print(f"Received exit signal {signal.name}...")
+    await app.close()
+    loop.stop()
+
+def main():
+    loop = asyncio.get_event_loop()
+    
+    # Handle shutdown signals
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(
+            sig,
+            lambda s=sig: asyncio.create_task(shutdown(s, loop))
+        )
+    
+    try:
+        loop.run_until_complete(app.run())
+    finally:
+        loop.close()
+
+if __name__ == "__main__":
+    main()
+```
+
+## Monitoring and Observability
+
+### Prometheus Metrics
+
+```python
+# monitoring.py
+from prometheus_client import Counter, Histogram, Gauge
+from faststream import Context
+import time
+
+# Define metrics
+message_counter = Counter(
+    'faststream_messages_total',
+    'Total number of messages processed',
+    ['topic', 'status']
+)
+
+message_duration = Histogram(
+    'faststream_message_duration_seconds',
+    'Time spent processing messages',
+    ['topic']
+)
+
+active_connections = Gauge(
+    'faststream_active_connections',
+    'Number of active broker connections'
+)
+
+def metrics_middleware(context: Context, call_next):
+    start_time = time.time()
+    
+    try:
+        result = await call_next(context)
+        
+        # Record success metrics
+        message_counter.labels(
+            topic=context.topic,
+            status="success"
+        ).inc()
+        
+        # Record duration
+        duration = time.time() - start_time
+        message_duration.labels(topic=context.topic).observe(duration)
+        
+        return result
+    except Exception as e:
+        # Record error metrics
+        message_counter.labels(
+            topic=context.topic,
+            status="error"
+        ).inc()
+        raise
+
+# Prometheus endpoint
+@app.get("/metrics")
+async def metrics_endpoint():
+    from prometheus_client import generate_latest
+    return Response(generate_latest(), media_type="text/plain")
+```
+
+### Distributed Tracing
+
+```python
+# tracing.py
+from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from faststream import Context
+
+# Configure tracing
+trace.set_tracer_provider(TracerProvider())
+jaeger_exporter = JaegerExporter(
+    agent_host_name="jaeger",
+    agent_port=6831,
+)
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(jaeger_exporter)
+)
+
+tracer = trace.get_tracer(__name__)
+
+def tracing_middleware(context: Context, call_next):
+    with tracer.start_as_current_span("process_message") as span:
+        span.set_attribute("topic", context.topic)
+        span.set_attribute("message_id", context.message_id)
+        
+        try:
+            result = await call_next(context)
+            span.set_attribute("status", "success")
+            return result
+        except Exception as e:
+            span.set_attribute("status", "error")
+            span.record_exception(e)
+            raise
+```
+
+### Structured Logging
+
+```python
+# logging.py
+import logging
+import json
+from datetime import datetime
+from faststream import Context
+
+class StructuredLogger:
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    def log_message(self, context: Context, level: str, message: str, **kwargs):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": level,
+            "message": message,
+            "topic": context.topic,
+            "message_id": context.message_id,
+            **kwargs
+        }
+        
+        self.logger.log(
+            getattr(logging, level.upper()),
+            json.dumps(log_entry)
+        )
+
+logger = StructuredLogger()
+
+def logging_middleware(context: Context, call_next):
+    logger.log_message(context, "info", "Processing message")
+    
+    try:
+        result = await call_next(context)
+        logger.log_message(context, "info", "Message processed successfully")
+        return result
+    except Exception as e:
+        logger.log_message(
+            context, "error", "Message processing failed",
+            error=str(e)
+        )
+        raise
+```
+
+## Scaling Strategies
+
+### Horizontal Scaling
+
+```python
+# scaling.py
+from faststream import FastStream
+from faststream.kafka import KafkaBroker
+
+# Multiple instances can consume from the same Kafka topic
+app = FastStream("scalable-service")
+broker = KafkaBroker("kafka-cluster:9092")
+
+@app.subscribe("user-events")
+async def handle_user_event(message: dict):
+    # Each instance processes a subset of messages
+    return {"status": "processed", "instance": os.getenv("INSTANCE_ID")}
+```
+
+### Load Balancing
+
+```yaml
+# k8s/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: faststream-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: faststream.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: faststream-service
+            port:
+              number: 80
+```
+
+### Auto Scaling
+
+```yaml
+# k8s/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: faststream-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: faststream-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+## Security
+
+### Authentication and Authorization
+
+```python
+# security.py
+from faststream import Context
+from fastapi import HTTPException
+import jwt
+
+class SecurityMiddleware:
+    def __init__(self, secret_key: str):
+        self.secret_key = secret_key
+    
+    async def __call__(self, context: Context, call_next):
+        # Extract token from message headers
+        headers = getattr(context.message, 'headers', {})
+        token = headers.get('authorization')
+        
+        if not token:
+            raise HTTPException(status_code=401, detail="No token provided")
+        
+        try:
+            # Verify JWT token
+            payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
+            context.user = payload
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        return await call_next(context)
+
+# Apply security middleware
+app.add_middleware(SecurityMiddleware("your-secret-key"))
+```
+
+### TLS/SSL Configuration
+
+```python
+# tls_config.py
+import ssl
+from faststream.kafka import KafkaBroker
+
+# Configure SSL context
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+# Use SSL with Kafka
+broker = KafkaBroker(
+    "kafka-cluster:9092",
+    ssl_context=ssl_context,
+    security_protocol="SASL_SSL"
+)
+```
+
+### Network Security
+
+```yaml
+# k8s/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: faststream-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: faststream-app
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+```
+
+## Disaster Recovery
+
+### Backup and Restore
+
+```python
+# backup.py
+import json
+from datetime import datetime
+from faststream import FastStream
+
+class BackupService:
+    def __init__(self, backup_path: str):
+        self.backup_path = backup_path
+    
+    async def backup_messages(self, messages: list):
+        timestamp = datetime.now().isoformat()
+        filename = f"{self.backup_path}/messages_{timestamp}.json"
+        
+        with open(filename, 'w') as f:
+            json.dump(messages, f)
+        
+        return filename
+    
+    async def restore_messages(self, filename: str):
+        with open(filename, 'r') as f:
+            messages = json.load(f)
+        
+        return messages
+
+backup_service = BackupService("/backups")
+
+@app.subscribe("critical-events")
+async def handle_critical_event(message: dict):
+    # Backup critical messages
+    await backup_service.backup_messages([message])
+    
+    # Process message
+    return {"status": "processed"}
+```
+
+### Circuit Breaker
+
+```python
+# circuit_breaker.py
+import asyncio
+from enum import Enum
+from time import time
+
+class CircuitState(Enum):
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.last_failure_time = 0
+        self.state = CircuitState.CLOSED
+    
+    async def call(self, func, *args, **kwargs):
+        if self.state == CircuitState.OPEN:
+            if time() - self.last_failure_time > self.timeout:
+                self.state = CircuitState.HALF_OPEN
+            else:
+                raise Exception("Circuit breaker is open")
+        
+        try:
+            result = await func(*args, **kwargs)
+            self.on_success()
+            return result
+        except Exception as e:
+            self.on_failure()
+            raise e
+    
+    def on_success(self):
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+    
+    def on_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = time()
+        
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+
+# Use circuit breaker
+circuit_breaker = CircuitBreaker()
+
+@app.subscribe("external-api-events")
+async def handle_external_api_event(message: dict):
+    return await circuit_breaker.call(external_api_call, message)
+```
+
+## Performance Optimization
+
+### Connection Pooling
+
+```python
+# connection_pool.py
+import asyncio
+from typing import Dict, Any
+from faststream.kafka import KafkaBroker
+
+class ConnectionPool:
+    def __init__(self, max_connections: int = 10):
+        self.max_connections = max_connections
+        self.connections: Dict[str, Any] = {}
+        self.semaphore = asyncio.Semaphore(max_connections)
+    
+    async def get_connection(self, key: str):
+        async with self.semaphore:
+            if key not in self.connections:
+                self.connections[key] = await self.create_connection(key)
+            return self.connections[key]
+    
+    async def create_connection(self, key: str):
+        # Create new connection
+        return KafkaBroker(f"kafka-{key}:9092")
+
+connection_pool = ConnectionPool()
+
+@app.subscribe("events")
+async def handle_with_pool(message: dict):
+    connection = await connection_pool.get_connection("main")
+    # Use connection
+    return {"status": "processed"}
+```
+
+### Message Batching
+
+```python
+# batching.py
+import asyncio
+from typing import List, Optional
+from faststream import FastStream
+
+class MessageBatcher:
+    def __init__(self, batch_size: int = 100, batch_timeout: float = 1.0):
+        self.batch_size = batch_size
+        self.batch_timeout = batch_timeout
+        self.batch: List[dict] = []
+        self.batch_task: Optional[asyncio.Task] = None
+    
+    async def add_message(self, message: dict):
+        self.batch.append(message)
+        
+        if len(self.batch) >= self.batch_size:
+            await self.process_batch()
+        elif not self.batch_task:
+            self.batch_task = asyncio.create_task(self.schedule_batch())
+    
+    async def schedule_batch(self):
+        await asyncio.sleep(self.batch_timeout)
+        await self.process_batch()
+        self.batch_task = None
+    
+    async def process_batch(self):
+        if self.batch:
+            # Process batch
+            await process_messages_batch(self.batch)
+            self.batch.clear()
+
+batcher = MessageBatcher()
+
+@app.subscribe("batch-events")
+async def handle_batch_event(message: dict):
+    await batcher.add_message(message)
+    return {"status": "queued"}
+```
+
+## Best Practices
+
+### Configuration Management
+- Use environment variables for sensitive data
+- Implement configuration validation
+- Use different configurations for different environments
+- Centralize configuration management
+
+### Error Handling
+- Implement comprehensive error handling
+- Use appropriate error types
+- Log errors with context
+- Implement retry mechanisms with exponential backoff
+
+### Monitoring
+- Set up comprehensive monitoring
+- Use distributed tracing
+- Implement health checks
+- Set up alerting for critical issues
+
+### Security
+- Validate all inputs
+- Implement authentication and authorization
+- Use secure connections
+- Encrypt sensitive data
+
+### Performance
+- Use connection pooling
+- Implement message batching
+- Monitor resource usage
+- Optimize for your specific use case
+description:
+globs:
+alwaysApply: false
+---

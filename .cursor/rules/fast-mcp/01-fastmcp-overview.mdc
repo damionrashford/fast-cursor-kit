@@ -1,0 +1,199 @@
+# FastMCP 2.0 Overview
+
+FastMCP is the fast, Pythonic way to build MCP servers and clients. The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is a new, standardized way to provide context and tools to your LLMs, and FastMCP makes building MCP servers and clients simple and intuitive.
+
+## Core Example
+
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("Demo 🚀")
+
+@mcp.tool
+def add(a: int, b: int) -> int:
+    """Add two numbers"""
+    return a + b
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## Beyond the Protocol
+
+FastMCP is the standard framework for working with the Model Context Protocol. FastMCP 1.0 was incorporated into the [official MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) in 2024.
+
+This is FastMCP 2.0, the **actively maintained version** that provides a complete toolkit for working with the MCP ecosystem.
+
+FastMCP 2.0 has a comprehensive set of features that go far beyond the core MCP specification, all in service of providing **the simplest path to production**. These include deployment, auth, clients, server proxying and composition, generating servers from REST APIs, dynamic tool rewriting, built-in testing tools, integrations, and more.
+
+## What is MCP?
+
+The Model Context Protocol lets you build servers that expose data and functionality to LLM applications in a secure, standardized way. It is often described as "the USB-C port for AI", providing a uniform way to connect LLMs to resources they can use. It may be easier to think of it as an API, but specifically designed for LLM interactions. MCP servers can:
+
+* Expose data through `Resources` (think of these sort of like GET endpoints; they are used to load information into the LLM's context)
+* Provide functionality through `Tools` (sort of like POST endpoints; they are used to execute code or otherwise produce a side effect)
+* Define interaction patterns through `Prompts` (reusable templates for LLM interactions)
+* And more!
+
+FastMCP provides a high-level, Pythonic interface for building, managing, and interacting with these servers.
+
+## Why FastMCP?
+
+The MCP protocol is powerful but implementing it involves a lot of boilerplate - server setup, protocol handlers, content types, error management. FastMCP handles all the complex protocol details and server management, so you can focus on building great tools. It's designed to be high-level and Pythonic; in most cases, decorating a function is all you need.
+
+FastMCP 2.0 has evolved into a comprehensive platform that goes far beyond basic protocol implementation. While 1.0 provided server-building capabilities (and is now part of the official MCP SDK), 2.0 offers a complete ecosystem including client libraries, authentication systems, deployment tools, integrations with major AI platforms, testing frameworks, and production-ready infrastructure patterns.
+
+## FastMCP Aims to Be:
+
+🚀 **Fast**: High-level interface means less code and faster development
+
+🍀 **Simple**: Build MCP servers with minimal boilerplate
+
+🐍 **Pythonic**: Feels natural to Python developers
+
+🔍 **Complete**: A comprehensive platform for all MCP use cases, from dev to prod
+
+## Installation
+
+We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) to install and manage FastMCP.
+
+```bash
+uv add fastmcp
+```
+
+Alternatively, you can install it directly with `pip` or `uv pip`:
+
+```bash
+uv pip install fastmcp
+# or
+pip install fastmcp
+```
+
+### Verify Installation
+
+```bash
+fastmcp version
+```
+
+You should see output like:
+
+```bash
+FastMCP version:                           2.11.3
+MCP version:                               1.12.4
+Python version:                            3.12.2
+Platform:            macOS-15.3.1-arm64-arm-64bit
+FastMCP root path:            ~/Developer/fastmcp
+```
+
+## Upgrading from the Official MCP SDK
+
+Upgrading from the official MCP SDK's FastMCP 1.0 to FastMCP 2.0 is generally straightforward. The core server API is highly compatible, and in many cases, changing your import statement from `from mcp.server.fastmcp import FastMCP` to `from fastmcp import FastMCP` will be sufficient.
+
+```python
+# Before
+# from mcp.server.fastmcp import FastMCP
+
+# After
+from fastmcp import FastMCP
+
+mcp = FastMCP("My MCP Server")
+```
+
+## Versioning and Breaking Changes
+
+While we make every effort not to introduce backwards-incompatible changes to our public APIs and behavior, FastMCP exists in a rapidly evolving MCP landscape. We're committed to bringing the most cutting-edge features to our users, which occasionally necessitates changes to existing functionality.
+
+As a practice, breaking changes will only occur on minor version changes (e.g., 2.3.x to 2.4.0). A minor version change indicates either:
+
+* A significant new feature set that warrants a new minor version
+* Introducing breaking changes that may affect behavior on upgrade
+
+For users concerned about stability in production environments, we recommend pinning FastMCP to a specific version in your dependencies.
+
+## Core Components
+
+### FastMCP Server
+
+The main server class that manages tools, resources, and other MCP components.
+
+### Tools
+
+Functions decorated with `@mcp.tool` that provide functionality to LLMs.
+
+### Resources
+
+Data sources that can be loaded into LLM context.
+
+### Prompts
+
+Reusable templates for LLM interactions.
+
+### Clients
+
+Async clients for interacting with MCP servers.
+
+## Development Workflow
+
+1. **Create a FastMCP server** by instantiating the `FastMCP` class
+2. **Add tools** by decorating functions with `@mcp.tool`
+3. **Test locally** using FastMCP clients
+4. **Deploy** using various transport options (STDIO, HTTP, SSE)
+5. **Integrate** with AI platforms and applications
+
+## Key Features
+
+### Transport Options
+
+- **STDIO**: Standard input/output for local development
+- **HTTP**: RESTful API endpoints
+- **SSE**: Server-sent events for real-time communication
+
+### Authentication
+
+- **Bearer tokens**: Simple token-based authentication
+- **JWT**: JSON Web Token support
+- **OAuth 2.1**: Comprehensive OAuth support with WorkOS integration
+
+### Integrations
+
+- **Anthropic Claude**: Direct integration with Claude API
+- **OpenAI**: GPT model integration
+- **FastAPI**: ASGI/Starlette integration
+- **Cursor**: IDE integration
+- **Claude Desktop**: Desktop app integration
+
+### Advanced Features
+
+- **Server proxying**: Chain and compose MCP servers
+- **OpenAPI transformation**: Convert REST APIs to MCP servers
+- **Dynamic tool rewriting**: Modify tools at runtime
+- **Context state management**: Persistent state across tool calls
+- **Built-in testing**: Comprehensive testing tools
+
+## Best Practices
+
+1. **Use descriptive tool names** and docstrings
+2. **Handle errors gracefully** with proper exception handling
+3. **Validate inputs** using Pydantic models
+4. **Test thoroughly** with FastMCP's testing tools
+5. **Use appropriate transports** for your use case
+6. **Implement authentication** for production deployments
+7. **Monitor performance** and usage patterns
+
+## Getting Started
+
+1. Install FastMCP: `uv add fastmcp`
+2. Create a simple server with tools
+3. Test locally with FastMCP clients
+4. Deploy using your preferred transport
+5. Integrate with AI platforms
+
+FastMCP is made with 💙 by [Prefect](https://www.prefect.io/).
+
+---
+
+*Source: [https://gofastmcp.com/getting-started/welcome](https://gofastmcp.com/getting-started/welcome)*
+description:
+globs:
+alwaysApply: false
+---
