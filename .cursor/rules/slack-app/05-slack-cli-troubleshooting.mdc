@@ -1,0 +1,519 @@
+# Slack CLI Troubleshooting Guide
+
+## Common Issues and Solutions
+
+### Installation Problems
+
+#### Permission Denied Errors
+```bash
+# Error: Failed to create a symbolic link! The installer doesn't have write access to /usr/local/bin
+
+# Solution 1: Manual permission setup
+sudo mkdir -p -m 775 /usr/local/bin
+sudo ln -sf "$HOME/.slack/bin/slack" "/usr/local/bin/slack"
+
+# Solution 2: Run as root (if you have permissions)
+sudo curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
+
+# Solution 3: Use custom installation path
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s -- -p "$HOME/.local/bin"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### Existing `slack` Binary Conflict
+```bash
+# Error: Binary named 'slack' already exists in PATH
+
+# Solution 1: Use custom alias
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s slack-cli
+
+# Solution 2: Rename existing binary
+sudo mv /usr/local/bin/slack /usr/local/bin/slack-old
+
+# Solution 3: Check what's using the name
+which slack
+ls -la $(which slack)
+```
+
+#### Deno Installation Issues
+```bash
+# Error: Deno not found or version too old
+
+# Solution 1: Manual Deno installation
+curl -fsSL https://deno.land/install.sh | sh
+
+# Solution 2: Add Deno to PATH
+echo 'export DENO_INSTALL="$HOME/.deno"' >> ~/.bashrc
+echo 'export PATH="$DENO_INSTALL/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Solution 3: Verify Deno version
+deno --version
+# Should show: deno 1.46.2+ (minimum 1.37.0 required)
+```
+
+### Authentication Issues
+
+#### Login Failures
+```bash
+# Error: Authentication failed
+
+# Solution 1: Clear existing auth
+slack auth logout
+slack auth revoke
+
+# Solution 2: Check network connectivity
+curl -I https://slack.com/api/auth.test
+
+# Solution 3: Use different browser
+slack login --browser chrome
+
+# Solution 4: Check firewall/proxy settings
+export https_proxy=http://proxy.company.com:8080
+slack login
+```
+
+#### Token Issues
+```bash
+# Error: Invalid token or token expired
+
+# Solution 1: Check token validity
+slack auth token
+
+# Solution 2: Regenerate tokens in Slack app settings
+# Go to https://api.slack.com/apps > Your App > OAuth & Permissions
+
+# Solution 3: Use environment variables
+export SLACK_BOT_TOKEN=xoxb-your-new-token
+slack auth login
+```
+
+#### Enterprise Grid Issues
+```bash
+# Error: Enterprise Grid authentication failed
+
+# Solution 1: Use Enterprise Grid specific login
+slack login --enterprise
+
+# Solution 2: Check Enterprise Grid settings
+slack auth list --enterprise
+
+# Solution 3: Contact Enterprise Grid admin for permissions
+```
+
+### Development Issues
+
+#### Local Development Server Won't Start
+```bash
+# Error: Port already in use
+
+# Solution 1: Use different port
+slack run --port 3001
+
+# Solution 2: Kill existing process
+lsof -ti:3000 | xargs kill -9
+
+# Solution 3: Check what's using the port
+netstat -tulpn | grep :3000
+```
+
+#### Function Not Found
+```bash
+# Error: The `start` script was not found (sdk_hook_not_found)
+
+# Solution 1: Check hooks.json file
+cat .slack/hooks.json
+
+# Solution 2: Update deno-slack-hooks
+deno cache --reload .slack/hooks.json
+
+# Solution 3: Reinstall hooks
+slack doctor --fix-hooks
+
+# Solution 4: Check function file exists
+ls -la functions/
+```
+
+#### Manifest Validation Errors
+```bash
+# Error: Manifest validation failed
+
+# Solution 1: Validate manifest
+slack manifest validate
+
+# Solution 2: Check JSON syntax
+cat manifest.json | jq .
+
+# Solution 3: Use manifest template
+slack create temp-app
+cp temp-app/manifest.json ./
+```
+
+### Deployment Issues
+
+#### Deploy Failures
+```bash
+# Error: Deployment failed
+
+# Solution 1: Check app configuration
+slack doctor
+
+# Solution 2: Validate before deploy
+slack manifest validate
+slack deploy --dry-run
+
+# Solution 3: Force deploy (skip checks)
+slack deploy --force
+
+# Solution 4: Check deployment logs
+slack activity --type deploy
+```
+
+#### Function Deployment Issues
+```bash
+# Error: Function deployment failed
+
+# Solution 1: Check function syntax
+deno check functions/my_function.ts
+
+# Solution 2: Test function locally
+slack run --function my_function
+
+# Solution 3: Check function dependencies
+deno cache functions/my_function.ts
+
+# Solution 4: Deploy specific function
+slack deploy --function my_function
+```
+
+#### Environment Variable Issues
+```bash
+# Error: Environment variable not found
+
+# Solution 1: List environment variables
+slack env list
+
+# Solution 2: Add missing variable
+slack env add MY_VAR --value "my-value"
+
+# Solution 3: Check variable in function
+console.log(Deno.env.get("MY_VAR"))
+
+# Solution 4: Use default values
+const value = Deno.env.get("MY_VAR") || "default-value"
+```
+
+### Runtime Issues
+
+#### Function Execution Errors
+```bash
+# Error: Function execution failed
+
+# Solution 1: Check function logs
+slack activity --function my_function
+
+# Solution 2: Test function with sample data
+slack trigger create --function my_function
+
+# Solution 3: Add error handling
+try {
+  // Your function code
+} catch (error) {
+  console.error("Function error:", error);
+  return { success: false, error: error.message };
+}
+```
+
+#### Datastore Issues
+```bash
+# Error: Datastore operation failed
+
+# Solution 1: Check datastore permissions
+slack datastore list
+
+# Solution 2: Validate datastore schema
+slack datastore info my_datastore
+
+# Solution 3: Check data format
+slack datastore get my_datastore --key test_key
+
+# Solution 4: Clear corrupted data
+slack datastore delete my_datastore --key test_key
+```
+
+#### Trigger Issues
+```bash
+# Error: Trigger not working
+
+# Solution 1: List triggers
+slack trigger list
+
+# Solution 2: Check trigger configuration
+slack trigger info my_trigger
+
+# Solution 3: Test trigger manually
+slack trigger create --trigger my_trigger
+
+# Solution 4: Recreate trigger
+slack trigger delete my_trigger
+slack trigger create
+```
+
+### Network and Connectivity Issues
+
+#### SSL/TLS Issues
+```bash
+# Error: SSL certificate verification failed
+
+# Solution 1: Check system certificates
+openssl s_client -connect api.slack.com:443
+
+# Solution 2: Update CA certificates
+# macOS
+sudo security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain > /tmp/ca-bundle.crt
+
+# Linux
+sudo update-ca-certificates
+
+# Solution 3: Use custom CA bundle
+export SSL_CERT_FILE=/path/to/ca-bundle.crt
+slack login
+```
+
+#### Proxy Issues
+```bash
+# Error: Network connectivity issues
+
+# Solution 1: Set proxy environment variables
+export https_proxy=http://proxy.company.com:8080
+export http_proxy=http://proxy.company.com:8080
+export no_proxy=localhost,127.0.0.1
+
+# Solution 2: Configure proxy authentication
+export https_proxy=http://user:pass@proxy.company.com:8080
+
+# Solution 3: Bypass proxy for local development
+export no_proxy=localhost,127.0.0.1,*.local
+```
+
+#### Firewall Issues
+```bash
+# Error: Connection timeout
+
+# Solution 1: Check firewall rules
+# Allow outbound connections to:
+# - api.slack.com:443
+# - downloads.slack-edge.com:443
+
+# Solution 2: Test connectivity
+curl -I https://api.slack.com/api/auth.test
+
+# Solution 3: Use different network
+# Try from different network or VPN
+```
+
+### Performance Issues
+
+#### Slow Function Execution
+```bash
+# Issue: Functions taking too long
+
+# Solution 1: Optimize function code
+# Use async/await properly
+# Implement caching
+# Reduce external API calls
+
+# Solution 2: Check function timeout
+# Functions have a 30-second timeout limit
+
+# Solution 3: Use background processing
+# For long-running tasks, use triggers instead of functions
+```
+
+#### Memory Issues
+```bash
+# Issue: High memory usage
+
+# Solution 1: Check memory usage
+# Monitor function memory consumption
+
+# Solution 2: Optimize data structures
+# Use streaming for large datasets
+# Implement pagination
+
+# Solution 3: Clear caches
+# Implement cache expiration
+# Use smaller data chunks
+```
+
+### Platform-Specific Issues
+
+#### macOS Issues
+```bash
+# Issue: macOS-specific problems
+
+# Solution 1: Check macOS permissions
+# System Preferences > Security & Privacy > Privacy
+# Allow terminal access to files and folders
+
+# Solution 2: Update macOS
+# Ensure you're running a supported version
+
+# Solution 3: Check Homebrew conflicts
+# If using Homebrew, ensure no conflicts with system tools
+```
+
+#### Linux Issues
+```bash
+# Issue: Linux-specific problems
+
+# Solution 1: Check system dependencies
+sudo apt-get update
+sudo apt-get install -y curl git
+
+# Solution 2: Check file permissions
+chmod +x ~/.slack/bin/slack
+
+# Solution 3: Check SELinux (if enabled)
+# Configure SELinux policies for Slack CLI
+```
+
+#### Windows Issues
+```bash
+# Issue: Windows-specific problems
+
+# Solution 1: Use PowerShell 7+
+# Install PowerShell 7 from Microsoft Store or GitHub
+
+# Solution 2: Check execution policy
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Solution 3: Use WSL2 for development
+# Install Windows Subsystem for Linux 2
+```
+
+## Debug Commands
+
+### System Diagnostics
+```bash
+# Comprehensive system check
+slack doctor
+
+# Check specific components
+slack doctor --check runtime
+slack doctor --check dependencies
+slack doctor --check configuration
+
+# Generate diagnostic report
+slack doctor --output report.json
+```
+
+### Log Analysis
+```bash
+# View activity logs
+slack activity
+
+# Filter logs by type
+slack activity --type function
+slack activity --type deploy
+slack activity --type trigger
+
+# Filter logs by date
+slack activity --since 2024-01-01
+slack activity --until 2024-01-31
+
+# Show detailed logs
+slack activity --verbose
+```
+
+### Configuration Validation
+```bash
+# Validate app manifest
+slack manifest validate
+
+# Show manifest details
+slack manifest info
+
+# Check environment variables
+slack env list
+
+# Validate hooks configuration
+cat .slack/hooks.json | jq .
+```
+
+## Error Code Reference
+
+### Common Error Codes
+```
+E001: Authentication failed
+E002: Invalid token
+E003: Permission denied
+E004: Network timeout
+E005: SSL certificate error
+E006: Function not found
+E007: Manifest validation failed
+E008: Deployment failed
+E009: Environment variable missing
+E010: Datastore operation failed
+```
+
+### Error Resolution Steps
+```bash
+# For each error code, follow these steps:
+
+# 1. Check the error message for details
+# 2. Run slack doctor to identify issues
+# 3. Check relevant logs with slack activity
+# 4. Validate configuration files
+# 5. Test with minimal example
+# 6. Check documentation for specific error
+# 7. Contact support if issue persists
+```
+
+## Getting Help
+
+### Documentation Resources
+- [Slack CLI Documentation](https://docs.slack.dev/tools/slack-cli)
+- [Slack API Documentation](https://api.slack.com)
+- [Bolt Framework Documentation](https://slack.dev/bolt)
+
+### Community Support
+- [Slack Developer Community](https://slack.dev/community)
+- [Stack Overflow](https://stackoverflow.com/questions/tagged/slack-api)
+- [GitHub Issues](https://github.com/slackapi/deno-slack-sdk/issues)
+
+### Official Support
+- [Slack Developer Support](https://api.slack.com/support)
+- [Enterprise Support](https://slack.com/help/contact-us)
+
+### Debugging Checklist
+```bash
+# Before contacting support, gather:
+
+# 1. System information
+slack doctor --output system-info.json
+
+# 2. Error logs
+slack activity --output error-logs.json
+
+# 3. App configuration
+slack manifest --output manifest.json
+
+# 4. Environment variables (sanitized)
+slack env list --output env-vars.json
+
+# 5. Steps to reproduce
+# Document exact steps that cause the issue
+
+# 6. Expected vs actual behavior
+# Describe what should happen vs what actually happens
+```
+
+---
+
+*Source: [https://docs.slack.dev/tools/slack-cli/guides/troubleshooting-slack-cli-errors](https://docs.slack.dev/tools/slack-cli/guides/troubleshooting-slack-cli-errors)*
+description:
+globs:
+alwaysApply: false
+---

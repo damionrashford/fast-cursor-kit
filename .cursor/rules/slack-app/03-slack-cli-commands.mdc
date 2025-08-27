@@ -1,0 +1,651 @@
+# Slack CLI Commands Reference
+
+## Core Commands
+
+### `slack` - Main CLI Tool
+```bash
+slack <command> <subcommand> [flags]
+```
+
+**Global Flags:**
+- `-a, --app string`: Use specific app ID or environment
+- `--config-dir string`: Custom path for system config directory
+- `-e, --experiment strings`: Use experiment(s) in command
+- `-f, --force`: Ignore warnings and continue
+- `-h, --help`: Help for slack
+- `--no-color`: Remove styles and formatting
+- `-s, --skip-update`: Skip checking for latest version
+- `-w, --team string`: Select workspace by team name or ID
+- `--token string`: Set access token for team
+- `-v, --verbose`: Print debug logging
+
+## Authentication Commands
+
+### `slack auth` - Authentication Management
+```bash
+# List all authenticated teams
+slack auth list
+
+# Login to Slack account
+slack auth login
+
+# Logout from team
+slack auth logout
+
+# Revoke authentication
+slack auth revoke
+
+# Get auth token
+slack auth token
+```
+
+### `slack login` - Quick Login
+```bash
+# Login to Slack
+slack login
+
+# Login with specific team
+slack login --team my-workspace
+```
+
+### `slack logout` - Quick Logout
+```bash
+# Logout from current team
+slack logout
+
+# Logout from specific team
+slack logout --team my-workspace
+```
+
+## App Management Commands
+
+### `slack app` - App Operations
+```bash
+# Delete app
+slack app delete
+
+# Install app to team
+slack app install
+
+# Link app to team
+slack app link
+
+# List teams with app installed
+slack app list
+
+# Manage app settings
+slack app settings
+
+# Uninstall app from team
+slack app uninstall
+```
+
+### `slack create` - Create New App
+```bash
+# Create new Slack app
+slack create my-app
+
+# Create with specific template
+slack create my-app --template workflow
+
+# Create with custom manifest
+slack create my-app --manifest-path ./manifest.json
+```
+
+### `slack init` - Initialize Existing App
+```bash
+# Initialize app in current directory
+slack init
+
+# Initialize with specific app ID
+slack init --app A1234567890
+
+# Initialize with manifest file
+slack init --manifest-path ./manifest.json
+```
+
+### `slack delete` - Delete App
+```bash
+# Delete app
+slack delete
+
+# Delete with confirmation
+slack delete --force
+```
+
+## Development Commands
+
+### `slack run` - Local Development
+```bash
+# Start local development server
+slack run
+
+# Run with specific port
+slack run --port 3000
+
+# Run with debug mode
+slack run --verbose
+
+# Run specific function
+slack run --function my-function
+```
+
+### `slack deploy` - Deploy App
+```bash
+# Deploy app to Slack Platform
+slack deploy
+
+# Deploy with force
+slack deploy --force
+
+# Deploy specific functions
+slack deploy --function my-function
+
+# Deploy with custom environment
+slack deploy --env production
+```
+
+### `slack install` - Install App
+```bash
+# Install app to workspace
+slack install
+
+# Install to specific team
+slack install --team my-workspace
+
+# Install with custom permissions
+slack install --permissions chat:write,channels:read
+```
+
+### `slack uninstall` - Uninstall App
+```bash
+# Uninstall app from workspace
+slack uninstall
+
+# Uninstall from specific team
+slack uninstall --team my-workspace
+```
+
+## Function Management
+
+### `slack function` - Function Operations
+```bash
+# List all functions
+slack function list
+
+# Get function details
+slack function info my-function
+
+# Update function
+slack function update my-function
+
+# Delete function
+slack function delete my-function
+```
+
+### `slack function access` - Function Access Control
+```bash
+# List function access
+slack function access
+
+# Grant access to function
+slack function access grant --user U1234567890
+
+# Revoke access from function
+slack function access revoke --user U1234567890
+```
+
+## Trigger Management
+
+### `slack trigger` - Trigger Operations
+```bash
+# List all triggers
+slack trigger list
+
+# Get trigger details
+slack trigger info my-trigger
+
+# Create new trigger
+slack trigger create
+
+# Update trigger
+slack trigger update my-trigger
+
+# Delete trigger
+slack trigger delete my-trigger
+```
+
+### `slack trigger access` - Trigger Access Control
+```bash
+# List trigger access
+slack trigger access
+
+# Grant access to trigger
+slack trigger access grant --user U1234567890
+
+# Revoke access from trigger
+slack trigger access revoke --user U1234567890
+```
+
+## Datastore Commands
+
+### `slack datastore` - Datastore Operations
+```bash
+# List datastores
+slack datastore list
+
+# Get datastore info
+slack datastore info my-datastore
+
+# Create datastore
+slack datastore create my-datastore
+
+# Delete datastore
+slack datastore delete my-datastore
+```
+
+### Data Operations
+```bash
+# Put data
+slack datastore put my-datastore --key user:123 --value '{"name": "John"}'
+
+# Get data
+slack datastore get my-datastore --key user:123
+
+# Delete data
+slack datastore delete my-datastore --key user:123
+
+# Query data
+slack datastore query my-datastore --expression "name = 'John'"
+
+# Count records
+slack datastore count my-datastore
+```
+
+### Bulk Operations
+```bash
+# Bulk put data
+slack datastore bulk-put my-datastore --file data.json
+
+# Bulk get data
+slack datastore bulk-get my-datastore --keys key1,key2,key3
+
+# Bulk delete data
+slack datastore bulk-delete my-datastore --keys key1,key2,key3
+
+# Bulk update data
+slack datastore bulk-update my-datastore --file updates.json
+```
+
+## Environment Management
+
+### `slack env` - Environment Variables
+```bash
+# List environment variables
+slack env list
+
+# Add environment variable
+slack env add MY_VAR --value "my-value"
+
+# Remove environment variable
+slack env remove MY_VAR
+```
+
+### `slack env add` - Add Environment Variable
+```bash
+# Add simple variable
+slack env add API_KEY --value "xoxb-123"
+
+# Add with description
+slack env add DATABASE_URL --value "postgres://..." --description "Database connection"
+
+# Add from file
+slack env add --file .env
+```
+
+### `slack env remove` - Remove Environment Variable
+```bash
+# Remove variable
+slack env remove API_KEY
+
+# Remove multiple variables
+slack env remove API_KEY DATABASE_URL
+```
+
+## Project Management
+
+### `slack project` - Project Operations
+```bash
+# Create new project
+slack project create my-project
+
+# Initialize project
+slack project init
+
+# List sample projects
+slack project samples
+```
+
+### `slack project create` - Create Project
+```bash
+# Create with template
+slack project create my-project --template workflow
+
+# Create with custom manifest
+slack project create my-project --manifest-path ./manifest.json
+
+# Create in specific directory
+slack project create my-project --path ./apps/
+```
+
+### `slack project init` - Initialize Project
+```bash
+# Initialize in current directory
+slack project init
+
+# Initialize with app ID
+slack project init --app A1234567890
+
+# Initialize with manifest
+slack project init --manifest-path ./manifest.json
+```
+
+### `slack project samples` - Sample Projects
+```bash
+# List all samples
+slack project samples
+
+# List samples by category
+slack project samples --category workflow
+
+# Get sample details
+slack project samples --sample hello-world
+```
+
+## Platform Commands
+
+### `slack platform` - Platform Operations
+```bash
+# Deploy to platform
+slack platform deploy
+
+# Run on platform
+slack platform run
+
+# View platform activity
+slack platform activity
+```
+
+### `slack platform deploy` - Platform Deployment
+```bash
+# Deploy app
+slack platform deploy
+
+# Deploy with force
+slack platform deploy --force
+
+# Deploy specific functions
+slack platform deploy --function my-function
+```
+
+### `slack platform run` - Platform Execution
+```bash
+# Run app on platform
+slack platform run
+
+# Run with parameters
+slack platform run --param key=value
+
+# Run specific function
+slack platform run --function my-function
+```
+
+### `slack platform activity` - Platform Activity
+```bash
+# View activity logs
+slack platform activity
+
+# Filter by date
+slack platform activity --since 2024-01-01
+
+# Filter by function
+slack platform activity --function my-function
+```
+
+## Utility Commands
+
+### `slack doctor` - System Diagnostics
+```bash
+# Check system health
+slack doctor
+
+# Check specific components
+slack doctor --check runtime
+
+# Generate report
+slack doctor --output report.json
+```
+
+### `slack manifest` - Manifest Operations
+```bash
+# Show manifest
+slack manifest
+
+# Validate manifest
+slack manifest validate
+
+# Get manifest info
+slack manifest info
+```
+
+### `slack version` - Version Information
+```bash
+# Show CLI version
+slack version
+
+# Show all versions
+slack version --all
+```
+
+### `slack upgrade` - Upgrade CLI
+```bash
+# Upgrade to latest version
+slack upgrade
+
+# Check for updates
+slack upgrade --check
+
+# Upgrade to specific version
+slack upgrade --version 2.1.0
+```
+
+## Collaboration Commands
+
+### `slack collaborator` - Collaborator Management
+```bash
+# List collaborators
+slack collaborator list
+
+# Add collaborator
+slack collaborator add user@example.com
+
+# Remove collaborator
+slack collaborator remove user@example.com
+```
+
+### `slack collaborator add` - Add Collaborator
+```bash
+# Add by email
+slack collaborator add user@example.com
+
+# Add with role
+slack collaborator add user@example.com --role developer
+
+# Add multiple users
+slack collaborator add user1@example.com user2@example.com
+```
+
+### `slack collaborator remove` - Remove Collaborator
+```bash
+# Remove by email
+slack collaborator remove user@example.com
+
+# Remove multiple users
+slack collaborator remove user1@example.com user2@example.com
+```
+
+## External Authentication
+
+### `slack external-auth` - External Auth Management
+```bash
+# List external auth providers
+slack external-auth list
+
+# Add external auth provider
+slack external-auth add
+
+# Remove external auth provider
+slack external-auth remove
+
+# Select auth provider
+slack external-auth select-auth
+```
+
+### `slack external-auth add` - Add External Auth
+```bash
+# Add OAuth provider
+slack external-auth add --type oauth --name github
+
+# Add with configuration
+slack external-auth add --config auth-config.json
+```
+
+### `slack external-auth add-secret` - Add Auth Secret
+```bash
+# Add secret
+slack external-auth add-secret --provider github --key client_secret --value "secret123"
+```
+
+## Feedback and Support
+
+### `slack feedback` - Send Feedback
+```bash
+# Send feedback
+slack feedback
+
+# Send with details
+slack feedback --message "Great tool!" --category general
+```
+
+## List and Search Commands
+
+### `slack list` - List Resources
+```bash
+# List all authorized accounts
+slack list
+
+# List apps
+slack list --type apps
+
+# List teams
+slack list --type teams
+```
+
+### `slack samples` - Sample Apps
+```bash
+# List sample apps
+slack samples
+
+# List by category
+slack samples --category workflow
+
+# Get sample details
+slack samples --sample hello-world
+```
+
+## Activity Monitoring
+
+### `slack activity` - Activity Logs
+```bash
+# Show activity logs
+slack activity
+
+# Filter by date
+slack activity --since 2024-01-01 --until 2024-01-31
+
+# Filter by type
+slack activity --type function
+
+# Show detailed logs
+slack activity --verbose
+```
+
+## Command Examples
+
+### Complete Workflow Example
+```bash
+# 1. Login to Slack
+slack login
+
+# 2. Create new app
+slack create my-workflow-app
+
+# 3. Navigate to app directory
+cd my-workflow-app
+
+# 4. Add environment variables
+slack env add API_KEY --value "xoxb-123"
+
+# 5. Run locally
+slack run
+
+# 6. Deploy to platform
+slack deploy
+
+# 7. Install to workspace
+slack install
+
+# 8. Create trigger
+slack trigger create
+
+# 9. Monitor activity
+slack activity
+```
+
+### Bolt App Example
+```bash
+# 1. Initialize Bolt app
+slack init --manifest-path ./manifest.json
+
+# 2. Run Bolt app locally
+slack run --port 3000
+
+# 3. Deploy Bolt app
+slack deploy
+
+# 4. Install to workspace
+slack install
+```
+
+### Enterprise Grid Example
+```bash
+# 1. Login to Enterprise Grid
+slack login --team enterprise-workspace
+
+# 2. Create app with enterprise scopes
+slack create enterprise-app --template enterprise
+
+# 3. Deploy to enterprise
+slack deploy --enterprise
+
+# 4. Install to enterprise workspace
+slack install --enterprise
+```
+
+---
+
+*Source: [https://docs.slack.dev/tools/slack-cli/reference/commands/slack](https://docs.slack.dev/tools/slack-cli/reference/commands/slack)*
+description:
+globs:
+alwaysApply: false
+---

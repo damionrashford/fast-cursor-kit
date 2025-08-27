@@ -1,0 +1,344 @@
+# Slack CLI Installation Guide
+
+## Automated Installation
+
+### macOS & Linux
+
+The recommended installation method for macOS and Linux:
+
+```bash
+# Basic installation
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
+
+# Installation with custom alias (if you have another 'slack' binary)
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s slack-cli
+
+# Installation with specific version
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s -- -v 2.1.0
+
+# Installation without Deno (for Bolt apps only)
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s -- -d
+```
+
+### Windows
+
+For Windows, PowerShell 7+ is required:
+
+```powershell
+# Install PowerShell 7 first
+iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
+
+# Then install Slack CLI
+# Download from: https://downloads.slack-edge.com/slack-cli/
+```
+
+## Manual Installation
+
+### Prerequisites
+
+#### 1. Install Deno (Required for Workflow Apps)
+```bash
+# macOS & Linux
+curl -fsSL https://deno.land/install.sh | sh
+
+# Windows
+irm https://deno.land/install.ps1 | iex
+
+# Verify installation
+deno --version
+# Should show: deno 1.46.2+ (minimum 1.37.0 required)
+```
+
+#### 2. Install Git
+```bash
+# macOS
+brew install git
+
+# Ubuntu/Debian
+sudo apt-get install git
+
+# Windows
+# Download from: https://git-scm.com/download/win
+```
+
+#### 3. Install Node.js (For Bolt JavaScript Apps)
+```bash
+# Using nvm (recommended)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install node
+nvm use node
+
+# Or download from: https://nodejs.org/
+```
+
+#### 4. Install Python (For Bolt Python Apps)
+```bash
+# macOS
+brew install python
+
+# Ubuntu/Debian
+sudo apt-get install python3 python3-pip
+
+# Windows
+# Download from: https://www.python.org/downloads/
+```
+
+### Download Slack CLI
+
+#### macOS
+```bash
+# Apple Silicon
+curl -O https://downloads.slack-edge.com/slack-cli/slack-cli-mac-arm64.tar.gz
+tar -xzf slack-cli-mac-arm64.tar.gz
+
+# Intel
+curl -O https://downloads.slack-edge.com/slack-cli/slack-cli-mac-x64.tar.gz
+tar -xzf slack-cli-mac-x64.tar.gz
+```
+
+#### Linux
+```bash
+curl -O https://downloads.slack-edge.com/slack-cli/slack-cli-linux-x64.tar.gz
+tar -xzf slack-cli-linux-x64.tar.gz
+```
+
+#### Windows
+Download from: https://downloads.slack-edge.com/slack-cli/
+
+### Add to PATH
+
+#### macOS & Linux
+```bash
+# Move to a directory in your PATH
+sudo mv slack /usr/local/bin/
+
+# Or add to your shell profile
+echo 'export PATH="$HOME/.slack/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### Windows
+Add the Slack CLI directory to your system PATH environment variable.
+
+## Verification
+
+### Check Installation
+```bash
+# Verify Slack CLI
+slack version
+# Should show: Using slack v3.5.2
+
+# Check all dependencies
+slack doctor
+```
+
+### Expected Output from `slack doctor`
+```
+✅ System (operating system and architecture)
+    OS: macOS
+    Architecture: arm64
+
+✅ Runtime (foundations for the application)
+    deno: 1.46.2
+    deno_slack_hooks: 1.3.0
+
+✅ Dependencies (requisites for development)
+    git: 2.39.0
+    node: 18.17.0 (for Bolt apps)
+    python: 3.11.0 (for Bolt apps)
+
+✅ Configurations (your project's CLI settings)
+    Project ID: 1a2b3c4d-ef5g-67hi-8j9k1l2m3n4o
+```
+
+## Troubleshooting Installation
+
+### Permission Issues
+
+#### macOS & Linux
+```bash
+# If you get permission errors
+sudo mkdir -p -m 775 /usr/local/bin
+sudo ln -sf "$HOME/.slack/bin/slack" "/usr/local/bin/slack"
+
+# Or run installation as root
+sudo curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
+```
+
+#### Windows
+- Run PowerShell as Administrator
+- Check Windows Defender settings
+- Verify execution policy: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+
+### Existing `slack` Binary Conflict
+
+If you have another tool named `slack` in your PATH:
+
+```bash
+# Use custom alias during installation
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s slack-cli
+
+# Or rename existing binary
+sudo mv /usr/local/bin/slack /usr/local/bin/slack-old
+```
+
+### Deno Installation Issues
+
+```bash
+# Manual Deno installation
+curl -fsSL https://deno.land/install.sh | sh
+
+# Add to PATH
+echo 'export DENO_INSTALL="$HOME/.deno"' >> ~/.bashrc
+echo 'export PATH="$DENO_INSTALL/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify
+deno --version
+```
+
+### Network Issues
+
+```bash
+# Check connectivity
+curl -I https://downloads.slack-edge.com/slack-cli/install.sh
+
+# Use proxy if needed
+export https_proxy=http://proxy.company.com:8080
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
+```
+
+## Post-Installation Setup
+
+### 1. Login to Slack
+```bash
+slack login
+# Follow the browser-based OAuth flow
+```
+
+### 2. Verify Authentication
+```bash
+slack auth list
+# Should show your authenticated workspaces
+```
+
+### 3. Install VSCode Extension (Recommended)
+```bash
+# Install Deno extension for VSCode
+code --install-extension denoland.vscode-deno
+```
+
+### 4. Create First App
+```bash
+# Create a new app
+slack create my-first-app
+
+# Or initialize existing app
+slack init
+```
+
+## Environment Configuration
+
+### Environment Variables
+```bash
+# Set custom config directory
+export SLACK_CLI_CONFIG_DIR="$HOME/.slack-custom"
+
+# Set custom token
+export SLACK_BOT_TOKEN=xoxb-your-token
+
+# Set custom team
+export SLACK_TEAM_ID=T1234567890
+```
+
+### Configuration Files
+```bash
+# Global config
+~/.slack/config.json
+
+# Project config
+.slack/apps.json
+```
+
+## Uninstallation
+
+### macOS & Linux
+```bash
+# Remove Slack CLI
+rm -rf ~/.slack
+
+# Remove from PATH
+# Edit ~/.bashrc or ~/.zshrc and remove the PATH line
+
+# Remove symlink
+sudo rm /usr/local/bin/slack
+```
+
+### Windows
+```powershell
+# Remove installation directory
+Remove-Item -Recurse -Force "$env:USERPROFILE\.slack"
+
+# Remove from PATH
+# Edit System Environment Variables
+```
+
+## Version Management
+
+### Check Current Version
+```bash
+slack version
+```
+
+### Upgrade Slack CLI
+```bash
+slack upgrade
+```
+
+### Install Specific Version
+```bash
+# Download specific version
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash -s -- -v 2.1.0
+```
+
+## Platform-Specific Notes
+
+### macOS
+- Supports both Apple Silicon (M1/M2) and Intel processors
+- Automatic updates through Homebrew (if installed via Homebrew)
+- Integration with macOS Keychain for secure token storage
+
+### Linux
+- Supports x86_64 architecture
+- Systemd integration for service management
+- SELinux compatibility
+
+### Windows
+- Requires PowerShell 7+ (not Windows PowerShell)
+- WSL2 support for Linux-like development
+- Windows Terminal recommended for better experience
+
+## Security Considerations
+
+### Token Storage
+- Tokens are stored securely in `~/.slack/`
+- Use environment variables for sensitive data
+- Rotate tokens regularly
+
+### Network Security
+- All communications use HTTPS
+- Verify SSL certificates
+- Use corporate proxies if required
+
+### File Permissions
+- Ensure proper file permissions on config files
+- Don't share `.slack/` directory
+- Use secure file system permissions
+
+---
+
+*Source: [https://docs.slack.dev/tools/slack-cli/guides/installing-the-slack-cli-for-mac-and-linux](https://docs.slack.dev/tools/slack-cli/guides/installing-the-slack-cli-for-mac-and-linux)*
+description:
+globs:
+alwaysApply: false
+---

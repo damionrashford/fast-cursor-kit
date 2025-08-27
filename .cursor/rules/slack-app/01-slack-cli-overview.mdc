@@ -1,0 +1,188 @@
+# Slack CLI Overview
+
+## What is Slack CLI?
+
+The Slack CLI is a comprehensive command-line tool for creating, developing, and deploying Slack applications. It provides a complete development workflow for building both workflow apps and traditional Slack apps using Bolt frameworks.
+
+## Key Capabilities
+
+### Core Functionality
+- **App Creation**: Create new Slack apps from templates or scratch
+- **Local Development**: Run apps locally for testing and development
+- **Deployment**: Deploy apps to the Slack Platform
+- **Management**: Install, uninstall, and manage app installations
+- **Authentication**: Handle OAuth flows and token management
+- **Datastore**: Manage app data storage
+- **Triggers**: Create and manage app triggers
+
+### Supported App Types
+- **Workflow Apps**: Built with Deno and the Slack SDK
+- **Bolt Apps**: JavaScript and Python apps using Bolt frameworks
+- **Traditional Apps**: Standard Slack apps with custom backends
+
+## Installation Requirements
+
+### Prerequisites
+- **Deno Runtime**: Required for workflow apps (version 1.37.0+)
+- **Git**: Required for version control and project management
+- **Node.js**: Required for Bolt JavaScript apps
+- **Python**: Required for Bolt Python apps
+
+### Platform Support
+- **macOS**: Apple Silicon and Intel processors
+- **Linux**: x86_64 architecture
+- **Windows**: PowerShell 7+ required
+
+## Architecture Overview
+
+### CLI Structure
+```
+slack <command> <subcommand> [flags]
+```
+
+### Key Components
+- **Commands**: Main operations (create, run, deploy, etc.)
+- **Subcommands**: Specific actions within commands
+- **Flags**: Options and configuration parameters
+- **Hooks**: Custom scripts for app lifecycle events
+
+### Project Structure
+```
+my-slack-app/
+├── .slack/
+│   ├── hooks.json          # App lifecycle hooks
+│   └── apps.json          # App configurations
+├── manifest.json          # App manifest
+├── functions/             # Workflow functions
+├── triggers/              # App triggers
+└── datastores/            # Data storage
+```
+
+## Development Workflow
+
+### 1. Setup Phase
+```bash
+# Install Slack CLI
+curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
+
+# Login to Slack
+slack login
+
+# Create new app
+slack create my-app
+```
+
+### 2. Development Phase
+```bash
+# Initialize existing app
+slack init
+
+# Run locally
+slack run
+
+# Test triggers
+slack trigger create
+```
+
+### 3. Deployment Phase
+```bash
+# Deploy to Slack Platform
+slack deploy
+
+# Install to workspace
+slack install
+
+# Manage installations
+slack app list
+```
+
+## Authentication & Authorization
+
+### OAuth Flow
+- **User Tokens**: For user-specific operations
+- **Bot Tokens**: For bot user operations
+- **App-Level Tokens**: For app-wide operations
+
+### Scopes & Permissions
+- **Chat Scopes**: Send messages, manage channels
+- **User Scopes**: Access user information
+- **Admin Scopes**: Manage workspace settings
+
+## Environment Management
+
+### Local Development
+- **Environment Variables**: Configure app settings
+- **Secrets Management**: Secure credential storage
+- **Configuration Files**: App-specific settings
+
+### Production Deployment
+- **Platform Environment**: Slack Platform hosting
+- **External Hosting**: Custom server deployment
+- **CI/CD Integration**: Automated deployment pipelines
+
+## Best Practices
+
+### Development
+1. **Use Local Development**: Test thoroughly before deployment
+2. **Version Control**: Track all changes with Git
+3. **Environment Isolation**: Separate dev/staging/prod environments
+4. **Error Handling**: Implement robust error handling
+
+### Security
+1. **Token Management**: Secure storage and rotation
+2. **Scope Minimization**: Request only necessary permissions
+3. **Input Validation**: Validate all user inputs
+4. **Rate Limiting**: Respect API rate limits
+
+### Performance
+1. **Caching**: Implement appropriate caching strategies
+2. **Async Operations**: Use non-blocking operations
+3. **Resource Management**: Efficient memory and CPU usage
+4. **Monitoring**: Track app performance and usage
+
+## Troubleshooting
+
+### Common Issues
+- **Authentication Errors**: Check token validity and scopes
+- **Deployment Failures**: Verify app configuration
+- **Runtime Errors**: Check logs and error messages
+- **Permission Issues**: Verify required scopes
+
+### Debug Tools
+- `slack doctor`: Diagnose system and app issues
+- `slack logs`: View app activity logs
+- `slack manifest`: Inspect app configuration
+- `slack version`: Check CLI and SDK versions
+
+## Integration Patterns
+
+### With Bolt Frameworks
+- **JavaScript**: Use with Bolt for JavaScript
+- **Python**: Use with Bolt for Python
+- **TypeScript**: Full TypeScript support
+
+### With External Services
+- **Databases**: Connect to external data stores
+- **APIs**: Integrate with third-party services
+- **Webhooks**: Handle external events
+- **OAuth**: Connect to external OAuth providers
+
+## Resources
+
+### Documentation
+- [Slack CLI Documentation](https://docs.slack.dev/tools/slack-cli)
+- [Slack API Documentation](https://api.slack.com)
+- [Bolt Framework Documentation](https://slack.dev/bolt)
+
+### Community
+- [Slack Developer Community](https://slack.dev/community)
+- [GitHub Samples](https://github.com/slack-samples)
+- [Stack Overflow](https://stackoverflow.com/questions/tagged/slack-api)
+
+---
+
+*Source: [https://docs.slack.dev/tools/slack-cli](https://docs.slack.dev/tools/slack-cli)*
+description:
+globs:
+alwaysApply: false
+---

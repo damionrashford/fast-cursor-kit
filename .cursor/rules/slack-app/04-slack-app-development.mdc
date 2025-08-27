@@ -1,0 +1,799 @@
+# Slack App Development Patterns
+
+## App Types and Architecture
+
+### Workflow Apps (Deno-based)
+Workflow apps are built using Deno runtime and the Slack SDK, designed for serverless execution on the Slack Platform.
+
+#### Project Structure
+```
+workflow-app/
+├── .slack/
+│   ├── hooks.json          # App lifecycle hooks
+│   └── apps.json          # App configurations
+├── manifest.json          # App manifest
+├── functions/             # Workflow functions
+│   ├── hello_world.ts
+│   └── process_data.ts
+├── triggers/              # App triggers
+│   ├── link_trigger.ts
+│   └── scheduled_trigger.ts
+└── datastores/            # Data storage
+    └── user_data.json
+```
+
+#### Function Example
+```typescript
+// functions/hello_world.ts
+import { DefineFunction, Schema } from "deno-slack-sdk/mod.ts";
+
+export const HelloWorldFunction = DefineFunction({
+  callback_id: "hello_world",
+  title: "Hello World",
+  description: "A simple hello world function",
+  source_file: "functions/hello_world.ts",
+  input_parameters: {
+    properties: {
+      user_id: {
+        type: Schema.slack.types.user_id,
+        description: "User to greet",
+      },
+      channel_id: {
+        type: Schema.slack.types.channel_id,
+        description: "Channel to post in",
+      },
+    },
+    required: ["user_id", "channel_id"],
+  },
+  output_parameters: {
+    properties: {
+      message: {
+        type: Schema.types.string,
+        description: "Greeting message",
+      },
+    },
+    required: ["message"],
+  },
+});
+
+export default HelloWorldFunction;
+```
+
+#### Trigger Example
+```typescript
+// triggers/hello_trigger.ts
+import { Trigger } from "deno-slack-sdk/types.ts";
+import HelloWorldFunction from "../functions/hello_world.ts";
+
+const helloTrigger: Trigger<typeof HelloWorldFunction.definition> = {
+  type: "shortcut",
+  name: "Say Hello",
+  description: "Trigger to say hello",
+  workflow: "#/workflows/hello_world",
+  inputs: {
+    user_id: {
+      value: "{{data.user_id}}",
+    },
+    channel_id: {
+      value: "{{data.channel_id}}",
+    },
+  },
+};
+
+export default helloTrigger;
+```
+
+### Bolt Apps (JavaScript/Python)
+Bolt apps use traditional frameworks with Express.js (JavaScript) or Flask/FastAPI (Python).
+
+#### JavaScript Bolt App Structure
+```
+bolt-app/
+├── package.json
+├── app.js                 # Main app file
+├── .env                   # Environment variables
+├── manifest.json          # App manifest
+├── src/
+│   ├── listeners/         # Event listeners
+│   ├── middleware/        # Custom middleware
+│   └── utils/            # Utility functions
+└── tests/
+    └── app.test.js
+```
+
+#### JavaScript Bolt Example
+```javascript
+// app.js
+const { App } = require('@slack/bolt');
+
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode: true,
+  appToken: process.env.SLACK_APP_TOKEN,
+});
+
+// Listen to messages
+app.message('hello', async ({ message, say }) => {
+  await say(`Hey there <@${message.user}>!`);
+});
+
+// Handle slash commands
+app.command('/hello', async ({ command, ack, say }) => {
+  await ack();
+  await say(`Hello <@${command.user_id}>!`);
+});
+
+// Handle interactive components
+app.action('button_click', async ({ body, ack, say }) => {
+  await ack();
+  await say('Button was clicked!');
+});
+
+(async () => {
+  await app.start();
+  console.log('⚡️ Bolt app is running!');
+})();
+```
+
+#### Python Bolt App Structure
+```
+bolt-python-app/
+├── requirements.txt
+├── app.py                # Main app file
+├── .env                  # Environment variables
+├── manifest.json         # App manifest
+├── src/
+│   ├── listeners/        # Event listeners
+│   ├── middleware/       # Custom middleware
+│   └── utils/           # Utility functions
+└── tests/
+    └── test_app.py
+```
+
+#### Python Bolt Example
+```python
+# app.py
+from slack_bolt import App
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+import os
+
+app = App(
+    token=os.environ["SLACK_BOT_TOKEN"],
+    signing_secret=os.environ["SLACK_SIGNING_SECRET"]
+)
+
+# Listen to messages
+@app.message("hello")
+def message_hello(message, say):
+    say(f"Hey there <@{message['user']}>!")
+
+# Handle slash commands
+@app.command("/hello")
+def command_hello(ack, command, say):
+    ack()
+    say(f"Hello <@{command['user_id']}>!")
+
+# Handle interactive components
+@app.action("button_click")
+def action_button_click(ack, say):
+    ack()
+    say("Button was clicked!")
+
+if __name__ == "__main__":
+    handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    handler.start()
+```
+
+## Development Workflows
+
+### Local Development Setup
+
+#### 1. Environment Configuration
+```bash
+# Set up environment variables
+slack env add SLACK_BOT_TOKEN --value "xoxb-your-bot-token"
+slack env add SLACK_SIGNING_SECRET --value "your-signing-secret"
+slack env add SLACK_APP_TOKEN --value "xapp-your-app-token"
+
+# For Bolt apps, also add:
+slack env add NODE_ENV --value "development"
+slack env add PORT --value "3000"
+```
+
+#### 2. Local Development Server
+```bash
+# Start local development
+slack run
+
+# Run with specific port
+slack run --port 3000
+
+# Run with debug mode
+slack run --verbose
+
+# Run specific function (for workflow apps)
+slack run --function hello_world
+```
+
+#### 3. Testing and Debugging
+```bash
+# Check app health
+slack doctor
+
+# View app logs
+slack activity
+
+# Test triggers
+slack trigger create
+
+# Validate manifest
+slack manifest validate
+```
+
+### Deployment Workflow
+
+#### 1. Pre-deployment Checks
+```bash
+# Validate app configuration
+slack manifest validate
+
+# Check system health
+slack doctor
+
+# Test locally
+slack run
+```
+
+#### 2. Deploy to Platform
+```bash
+# Deploy app
+slack deploy
+
+# Deploy with force (skip checks)
+slack deploy --force
+
+# Deploy specific functions
+slack deploy --function hello_world
+
+# Deploy to specific environment
+slack deploy --env production
+```
+
+#### 3. Install and Test
+```bash
+# Install to workspace
+slack install
+
+# Install to specific team
+slack install --team my-workspace
+
+# Test installation
+slack app list
+```
+
+## App Manifest Configuration
+
+### Basic Manifest Structure
+```json
+{
+  "display_information": {
+    "name": "My Slack App",
+    "description": "A sample Slack app",
+    "background_color": "#2eb67d"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "My Bot",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/hello",
+        "description": "Say hello",
+        "usage_hint": "Type /hello to get a greeting"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "channels:read",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
+```
+
+### Advanced Manifest Features
+```json
+{
+  "display_information": {
+    "name": "Advanced App",
+    "description": "Advanced Slack app with multiple features",
+    "background_color": "#2eb67d",
+    "long_description": "A comprehensive Slack app with workflows, functions, and integrations"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Advanced Bot",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/workflow",
+        "description": "Start a workflow",
+        "usage_hint": "/workflow [action]",
+        "should_escape": false
+      }
+    ],
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": true
+    },
+    "workflow_steps": [
+      {
+        "name": "Process Data",
+        "type": "function",
+        "function_id": "process_data_function"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "channels:read",
+        "users:read",
+        "workflow.steps:execute"
+      ],
+      "user": [
+        "chat:write",
+        "channels:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": true,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": true,
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://your-app.com/slack/events"
+    },
+    "event_subscriptions": {
+      "request_url": "https://your-app.com/slack/events",
+      "bot_events": [
+        "message.channels",
+        "reaction_added"
+      ],
+      "user_events": [
+        "message.im"
+      ]
+    }
+  }
+}
+```
+
+## Function Development Patterns
+
+### Input/Output Schemas
+```typescript
+// Define input parameters
+const inputParameters = {
+  properties: {
+    user_id: {
+      type: Schema.slack.types.user_id,
+      description: "User to process",
+    },
+    channel_id: {
+      type: Schema.slack.types.channel_id,
+      description: "Channel for output",
+    },
+    data: {
+      type: Schema.types.object,
+      description: "Additional data",
+      properties: {
+        text: { type: Schema.types.string },
+        number: { type: Schema.types.number },
+        boolean: { type: Schema.types.boolean },
+      },
+    },
+  },
+  required: ["user_id", "channel_id"],
+};
+
+// Define output parameters
+const outputParameters = {
+  properties: {
+    success: {
+      type: Schema.types.boolean,
+      description: "Operation success status",
+    },
+    message: {
+      type: Schema.types.string,
+      description: "Result message",
+    },
+    data: {
+      type: Schema.types.object,
+      description: "Processed data",
+    },
+  },
+  required: ["success", "message"],
+};
+```
+
+### Error Handling
+```typescript
+export default async function(inputs: Inputs): Promise<Outputs> {
+  try {
+    // Validate inputs
+    if (!inputs.user_id) {
+      throw new Error("User ID is required");
+    }
+
+    // Process data
+    const result = await processData(inputs);
+
+    // Return success
+    return {
+      success: true,
+      message: "Operation completed successfully",
+      data: result,
+    };
+  } catch (error) {
+    console.error("Function error:", error);
+    
+    // Return error
+    return {
+      success: false,
+      message: `Error: ${error.message}`,
+      data: null,
+    };
+  }
+}
+```
+
+### External API Integration
+```typescript
+export default async function(inputs: Inputs): Promise<Outputs> {
+  try {
+    // Call external API
+    const response = await fetch("https://api.example.com/data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.API_KEY}`,
+      },
+      body: JSON.stringify({
+        user_id: inputs.user_id,
+        data: inputs.data,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    return {
+      success: true,
+      message: "Data processed successfully",
+      data: result,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `API error: ${error.message}`,
+      data: null,
+    };
+  }
+}
+```
+
+## Trigger Development
+
+### Link Triggers
+```typescript
+const linkTrigger: Trigger<typeof MyFunction.definition> = {
+  type: "shortcut",
+  name: "Process Data",
+  description: "Process data from link",
+  workflow: "#/workflows/process_data",
+  inputs: {
+    user_id: {
+      value: "{{data.user_id}}",
+    },
+    url: {
+      value: "{{data.url}}",
+    },
+  },
+};
+```
+
+### Scheduled Triggers
+```typescript
+const scheduledTrigger: Trigger<typeof MyFunction.definition> = {
+  type: "scheduled",
+  name: "Daily Report",
+  description: "Generate daily report",
+  workflow: "#/workflows/daily_report",
+  schedule: {
+    start_time: "2024-01-01T09:00:00Z",
+    frequency: {
+      type: "daily",
+      repeats_every: 1,
+    },
+  },
+  inputs: {
+    channel_id: {
+      value: "C1234567890",
+    },
+  },
+};
+```
+
+### Event Triggers
+```typescript
+const eventTrigger: Trigger<typeof MyFunction.definition> = {
+  type: "event",
+  name: "Message Posted",
+  description: "Process new messages",
+  workflow: "#/workflows/process_message",
+  event: {
+    event_type: "slack#/events/message_posted",
+    channel_ids: ["C1234567890"],
+  },
+  inputs: {
+    user_id: {
+      value: "{{data.user_id}}",
+    },
+    channel_id: {
+      value: "{{data.channel_id}}",
+    },
+    text: {
+      value: "{{data.text}}",
+    },
+  },
+};
+```
+
+## Datastore Patterns
+
+### Data Storage
+```typescript
+// Store data
+const datastore = await Deno.slack.datastores.open("user_preferences");
+await datastore.put({
+  user_id: "U1234567890",
+  preferences: {
+    theme: "dark",
+    notifications: true,
+    language: "en",
+  },
+});
+
+// Retrieve data
+const data = await datastore.get("U1234567890");
+
+// Query data
+const results = await datastore.query({
+  expression: "preferences.theme = 'dark'",
+});
+
+// Delete data
+await datastore.delete("U1234567890");
+```
+
+### Bulk Operations
+```typescript
+// Bulk put
+const bulkData = [
+  { key: "user1", value: { name: "John", age: 30 } },
+  { key: "user2", value: { name: "Jane", age: 25 } },
+];
+await datastore.bulkPut(bulkData);
+
+// Bulk get
+const keys = ["user1", "user2"];
+const results = await datastore.bulkGet(keys);
+
+// Bulk delete
+await datastore.bulkDelete(keys);
+```
+
+## Testing Strategies
+
+### Unit Testing
+```typescript
+// functions/hello_world.test.ts
+import { assertEquals } from "https://deno.land/std/testing/asserts.ts";
+import HelloWorldFunction from "./hello_world.ts";
+
+Deno.test("Hello World Function", async () => {
+  const inputs = {
+    user_id: "U1234567890",
+    channel_id: "C1234567890",
+  };
+
+  const result = await HelloWorldFunction(inputs);
+
+  assertEquals(result.success, true);
+  assertEquals(typeof result.message, "string");
+});
+```
+
+### Integration Testing
+```typescript
+// tests/integration.test.ts
+import { assertEquals } from "https://deno.land/std/testing/asserts.ts";
+
+Deno.test("End-to-end workflow", async () => {
+  // Test complete workflow
+  const trigger = await createTestTrigger();
+  const result = await executeWorkflow(trigger);
+  
+  assertEquals(result.status, "completed");
+});
+```
+
+### Mock Testing
+```typescript
+// tests/mocks.ts
+export const mockSlackAPI = {
+  chat: {
+    postMessage: async (params: any) => ({
+      ok: true,
+      channel: params.channel,
+      ts: "1234567890.123456",
+    }),
+  },
+  users: {
+    info: async (params: any) => ({
+      ok: true,
+      user: {
+        id: params.user,
+        name: "testuser",
+        real_name: "Test User",
+      },
+    }),
+  },
+};
+```
+
+## Security Best Practices
+
+### Token Management
+```typescript
+// Secure token handling
+const botToken = Deno.env.get("SLACK_BOT_TOKEN");
+if (!botToken) {
+  throw new Error("SLACK_BOT_TOKEN is required");
+}
+
+// Use environment variables for secrets
+const apiKey = Deno.env.get("EXTERNAL_API_KEY");
+```
+
+### Input Validation
+```typescript
+// Validate user input
+function validateInput(input: any): boolean {
+  if (!input.user_id || typeof input.user_id !== "string") {
+    return false;
+  }
+  
+  if (!input.channel_id || typeof input.channel_id !== "string") {
+    return false;
+  }
+  
+  return true;
+}
+
+export default async function(inputs: Inputs): Promise<Outputs> {
+  if (!validateInput(inputs)) {
+    return {
+      success: false,
+      message: "Invalid input parameters",
+    };
+  }
+  
+  // Process valid input
+  // ...
+}
+```
+
+### Rate Limiting
+```typescript
+// Implement rate limiting
+const rateLimiter = new Map<string, number>();
+
+function checkRateLimit(userId: string, limit: number = 1000): boolean {
+  const now = Date.now();
+  const lastRequest = rateLimiter.get(userId) || 0;
+  
+  if (now - lastRequest < limit) {
+    return false;
+  }
+  
+  rateLimiter.set(userId, now);
+  return true;
+}
+```
+
+## Performance Optimization
+
+### Caching Strategies
+```typescript
+// Simple in-memory cache
+const cache = new Map<string, any>();
+
+async function getCachedData(key: string, ttl: number = 300000) {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < ttl) {
+    return cached.data;
+  }
+  
+  const data = await fetchData(key);
+  cache.set(key, {
+    data,
+    timestamp: Date.now(),
+  });
+  
+  return data;
+}
+```
+
+### Async Operations
+```typescript
+// Parallel processing
+export default async function(inputs: Inputs): Promise<Outputs> {
+  const [userData, channelData, settings] = await Promise.all([
+    fetchUserData(inputs.user_id),
+    fetchChannelData(inputs.channel_id),
+    fetchSettings(),
+  ]);
+  
+  return {
+    success: true,
+    data: { userData, channelData, settings },
+  };
+}
+```
+
+### Error Recovery
+```typescript
+// Retry mechanism
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+```
+
+---
+
+*Source: [https://docs.slack.dev/tools/slack-cli](https://docs.slack.dev/tools/slack-cli)*
+description:
+globs:
+alwaysApply: false
+---
